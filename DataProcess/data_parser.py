@@ -25,7 +25,7 @@ class DataParser:
 
 
 class DataParserV2:
-    def __init__(self, dataset_path, resize_shape, list_files, batch_size):
+    def __init__(self, dataset_path, resize_shape, list_files, batch_size, max_length=None):
         self.dataset_path = dataset_path
         self.resize_shape = resize_shape
         self.list_files = list_files
@@ -47,6 +47,10 @@ class DataParserV2:
         self.iteration = int(np.ceil(self.m / self.batch_size))
         self.iterator = 0
         self.indices = np.random.permutation(self.m)
+        if max_length and max_length < self.m:
+            self.indices = self.indices[:max_length]
+            self.m = max_length
+            self.iteration = int(np.ceil(self.m / self.batch_size))
 
     def get_indices(self, update=False):
         if self.iterator + 1 < self.iteration:
@@ -70,7 +74,7 @@ class DataParserV2:
             raw_name = os.path.join(self.raw_image_path, self.images_name[id])
             raw_img = cv2.imread(raw_name).astype(np.float32)
             raw_img = cv2.resize(raw_img, self.resize_shape)
-            raws.append(1 - raw_img / 255)
+            raws.append((1 - raw_img / 255) * 2 - 1)
         return np.asarray(raws)
 
     def get_batch_sketch(self):
@@ -87,8 +91,8 @@ class DataParserV2:
                 noise_channel[val // self.resize_shape[0]][val % self.resize_shape[1]] = noise[i]
             sketch = np.expand_dims(sketch, axis=2)
             noise_channel = np.expand_dims(noise_channel, axis=2)
-            sketch = sketch / 255 + noise_channel
-            sketches.append(sketch)
+            sketch = 1 - sketch / 255 + noise_channel
+            sketches.append(sketch * 2 - 1)
         return np.asarray(sketches)
 
     def get_batch_color_hint(self):
@@ -98,7 +102,7 @@ class DataParserV2:
             name = os.path.join(self.color_hint_path, self.images_name[id].split('.')[0] + '_colorhint.jpg')
             img = cv2.imread(name).astype(np.float32)
             img = cv2.resize(img, self.resize_shape)
-            res.append(img / 255)
+            res.append((1 - img / 255) * 2 - 1)
         return np.asarray(res)
 
     def get_batch_color_hint_whiteout(self):
@@ -108,7 +112,7 @@ class DataParserV2:
             name = os.path.join(self.color_hint_whiteout_path, self.images_name[id].split('.')[0] + '_whiteout.jpg')
             img = cv2.imread(name).astype(np.float32)
             img = cv2.resize(img, self.resize_shape)
-            res.append(1 - img / 255)
+            res.append((1 - img / 255) * 2 - 1)
         return np.asarray(res)
 
     def get_batch_color_block(self):
@@ -118,7 +122,7 @@ class DataParserV2:
             name = os.path.join(self.color_block_path, self.images_name[id].split('.')[0] + '_colorblock.jpg')
             img = cv2.imread(name).astype(np.float32)
             img = cv2.resize(img, self.resize_shape)
-            res.append(1 - img / 255)
+            res.append((1 - img / 255) * 2 - 1)
         return np.asarray(res)
 
     def get_batch_condition(self):
@@ -148,7 +152,7 @@ class DataParserV2:
                 for j in range(img_block.shape[1]):
                     if tmp[i, j] > 0.1:
                         img_whiteout[i, j, :] = img_block[i, j, :]
-            res.append(img_whiteout)
+            res.append(img_whiteout * 2 - 1)
         return np.asarray(res)
 
 

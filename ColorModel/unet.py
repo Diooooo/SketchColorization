@@ -12,133 +12,171 @@ class Unet:
         self.image_shape = image_shape
         self.batch_size = batch_size
 
-    def generator(self, input, condition):
+    def generator(self, input, condition, is_train):
         inputs = tf.concat(values=[input, condition], axis=3)
         with tf.variable_scope('generator'):
-            encode1, sample_encode1 = self.cnn_block(inputs, 64, (3, 3), sample_type='conv', scope_name='encode1')
+            encode1, sample_encode1 = self.cnn_block(inputs, 64, (3, 3), sample_type='conv', scope_name='encode1',
+                                                     is_train=is_train)
             encode2, sample_encode2 = self.cnn_block(sample_encode1, 128, (3, 3), sample_type='conv',
-                                                     scope_name='encode2')
+                                                     scope_name='encode2', is_train=is_train)
             encode3, sample_encode3 = self.cnn_block(sample_encode2, 256, (3, 3), sample_type='conv',
-                                                     scope_name='encode3')
+                                                     scope_name='encode3', is_train=is_train)
             encode4, sample_encode4 = self.cnn_block(sample_encode3, 512, (3, 3), sample_type='conv',
-                                                     scope_name='encode4')
+                                                     scope_name='encode4', is_train=is_train)
 
             with tf.variable_scope('last_encode'):
-                layer = tf.layers.conv2d(inputs=sample_encode4, filters=1024, kernel_size=(3, 3),
-                                         activation=tf.nn.leaky_relu, name='conv1', padding='same')
-                layer = tf.layers.conv2d(inputs=layer, filters=1024, kernel_size=(3, 3),
-                                         activation=tf.nn.leaky_relu, name='conv2', padding='same')
+                layer = tf.layers.conv2d(inputs=sample_encode4, filters=1024, kernel_size=(3, 3), name='conv',
+                                         padding='same')
+                layer = tf.layers.batch_normalization(layer, training=is_train)
+                layer = tf.nn.leaky_relu(layer)
             decode1, _ = self.cnn_block(layer, 512, (3, 3), sample_type='deconv', scope_name='decode1',
-                                        deconv_concatenate=encode4)
+                                        deconv_concatenate=encode4, is_train=is_train)
             decode2, _ = self.cnn_block(decode1, 256, (3, 3), sample_type='deconv', scope_name='decode2',
-                                        deconv_concatenate=encode3)
+                                        deconv_concatenate=encode3, is_train=is_train)
             decode3, _ = self.cnn_block(decode2, 128, (3, 3), sample_type='deconv', scope_name='decode3',
-                                        deconv_concatenate=encode2)
+                                        deconv_concatenate=encode2, is_train=is_train)
             decode4, _ = self.cnn_block(decode3, 64, (3, 3), sample_type='deconv', scope_name='decode4',
-                                        deconv_concatenate=encode1)
+                                        deconv_concatenate=encode1, is_train=is_train)
 
-            g_logits = tf.layers.conv2d(decode4, 3, (3, 3), padding='same', name='logits')
+            g_logits = tf.layers.conv2d(decode4, 3, (3, 3), padding='same', name='logits', activation=tf.nn.tanh)
 
             # loss = tf.nn.sigmoid_cross_entropy_with_logits(labels=self.target, logits=g_logits)
             # cost = tf.reduce_mean(loss)
             # optimizer = tf.train.AdamOptimizer().minimize(cost)
-            return g_logits
+        return g_logits
 
     def discriminator(self, input, condition, reuse=False):
         inputs = tf.concat(values=[input, condition], axis=3)
         with tf.variable_scope('discriminator', reuse=reuse):
-            layer = tf.layers.conv2d(inputs, 64, (3, 3), padding='same', activation=tf.nn.leaky_relu, name='conv1')
-            layer = tf.layers.max_pooling2d(layer, pool_size=(2, 2), strides=(2, 2), name='maxpool1')
-            layer = tf.layers.conv2d(layer, 128, (3, 3), padding='same', activation=tf.nn.leaky_relu, name='conv2')
-            layer = tf.layers.max_pooling2d(layer, pool_size=(2, 2), strides=(2, 2), name='maxpool2')
-            layer = tf.layers.conv2d(layer, 128, (3, 3), padding='same', activation=tf.nn.leaky_relu, name='conv3')
-            layer = tf.layers.max_pooling2d(layer, pool_size=(2, 2), strides=(2, 2), name='maxpool3')
-            layer = tf.layers.conv2d(layer, 64, (3, 3), padding='same', activation=tf.nn.leaky_relu, name='conv4')
-            layer = tf.layers.max_pooling2d(layer, pool_size=(2, 2), strides=(2, 2), name='maxpool4')
+            layer = tf.layers.conv2d(inputs, 64, (3, 3), strides=(2, 2), padding='same', activation=tf.nn.leaky_relu,
+                                     name='conv1')
+            # layer = tf.layers.max_pooling2d(layer, pool_size=(2, 2), strides=(2, 2), name='maxpool1')
+            layer = tf.layers.conv2d(layer, 128, (3, 3), strides=(2, 2), padding='same', activation=tf.nn.leaky_relu,
+                                     name='conv2')
+            # layer = tf.layers.max_pooling2d(layer, pool_size=(2, 2), strides=(2, 2), name='maxpool2')
+            layer = tf.layers.conv2d(layer, 128, (3, 3), strides=(2, 2), padding='same', activation=tf.nn.leaky_relu,
+                                     name='conv3')
+            # layer = tf.layers.max_pooling2d(layer, pool_size=(2, 2), strides=(2, 2), name='maxpool3')
+            layer = tf.layers.conv2d(layer, 64, (3, 3), strides=(2, 2), padding='same', activation=tf.nn.leaky_relu,
+                                     name='conv4')
+            # layer = tf.layers.max_pooling2d(layer, pool_size=(2, 2), strides=(2, 2), name='maxpool4')
             layer = tf.layers.flatten(layer)
             d_logits = tf.layers.dense(layer, 1000, kernel_initializer=tf.contrib.layers.variance_scaling_initializer(),
                                        activation=tf.nn.relu)
             d_logits = tf.layers.dense(d_logits, 1,
-                                       kernel_initializer=tf.contrib.layers.variance_scaling_initializer())
-            return d_logits
+                                       kernel_initializer=tf.contrib.layers.variance_scaling_initializer(),activation=tf.nn.sigmoid)
+        return d_logits
 
-    def cnn_block(self, input, num_filter, kernel_size, sample_type, scope_name, deconv_concatenate=None, reuse=False):
+    def cnn_block(self, input, num_filter, kernel_size, sample_type, scope_name, is_train, deconv_concatenate=None,
+                  reuse=False):
         if sample_type not in ['conv', 'deconv']:
             raise ValueError('Undefined sample type')
         with tf.variable_scope(scope_name, reuse=reuse):
             if sample_type == 'conv':
-                cnn1 = tf.layers.conv2d(inputs=input, filters=num_filter, kernel_size=kernel_size, padding='same',
-                                        activation=tf.nn.leaky_relu, name='conv1',
-                                        kernel_initializer=tf.contrib.layers.variance_scaling_initializer())
-                out = tf.layers.conv2d(inputs=cnn1, filters=num_filter, kernel_size=kernel_size, padding='same',
-                                       activation=tf.nn.leaky_relu, name='conv2',
+                # cnn1 = tf.layers.conv2d(inputs=input, filters=num_filter, kernel_size=kernel_size, padding='same',
+                #                         name='conv1',
+                #                         kernel_initializer=tf.contrib.layers.variance_scaling_initializer())
+                # cnn1 = tf.layers.batch_normalization(cnn1, training=is_train)
+                # cnn1 = tf.nn.leaky_relu(cnn1)
+                out = tf.layers.conv2d(inputs=input, filters=num_filter, kernel_size=kernel_size, padding='same',
+                                       name='conv2',
                                        kernel_initializer=tf.contrib.layers.variance_scaling_initializer())
-                sample_out = tf.layers.max_pooling2d(out, pool_size=(2, 2), strides=(2, 2), name='maxpool')
+                out = tf.layers.batch_normalization(out, training=is_train)
+                out = tf.nn.leaky_relu(out)
+                sample_out = tf.layers.conv2d(inputs=out, filters=num_filter * 2, kernel_size=kernel_size,
+                                              strides=(2, 2),
+                                              padding='same',
+                                              name='downsampling',
+                                              kernel_initializer=tf.contrib.layers.variance_scaling_initializer())
+                sample_out = tf.layers.batch_normalization(sample_out, training=is_train)
+                sample_out = tf.nn.leaky_relu(sample_out)
 
             else:
                 if deconv_concatenate is None:
                     raise ValueError('deconv_concatenate can not be None when building deconv structure')
                 dcnn = tf.layers.conv2d_transpose(inputs=input, filters=num_filter, kernel_size=kernel_size, strides=2,
-                                                  padding='same', activation=tf.nn.leaky_relu, name='deconv1',
+                                                  padding='same', name='deconv1',
                                                   kernel_initializer=tf.contrib.layers.variance_scaling_initializer())
+                dcnn = tf.layers.batch_normalization(dcnn, training=is_train)
+                dcnn = tf.nn.leaky_relu(dcnn)
                 concat = tf.concat(values=[dcnn, deconv_concatenate], axis=3)
-                dcnn1 = tf.layers.conv2d(inputs=concat, filters=num_filter, kernel_size=kernel_size, padding='same',
-                                         activation=tf.nn.leaky_relu, name='d_conv1',
-                                         kernel_initializer=tf.contrib.layers.variance_scaling_initializer())
-                out = tf.layers.conv2d(inputs=dcnn1, filters=num_filter, kernel_size=kernel_size, padding='same',
-                                       activation=tf.nn.leaky_relu, name='d_conv2',
+                # dcnn1 = tf.layers.conv2d(inputs=concat, filters=num_filter, kernel_size=kernel_size, padding='same',
+                #                          name='d_conv1',
+                #                          kernel_initializer=tf.contrib.layers.variance_scaling_initializer())
+                # dcnn1 = tf.layers.batch_normalization(dcnn1, training=is_train)
+                # dcnn1 = tf.nn.leaky_relu(dcnn1)
+                out = tf.layers.conv2d(inputs=concat, filters=num_filter, kernel_size=kernel_size, padding='same',
+                                       name='d_conv2',
                                        kernel_initializer=tf.contrib.layers.variance_scaling_initializer())
+                out = tf.layers.batch_normalization(out, training=is_train)
+                out = tf.nn.leaky_relu(out)
                 sample_out = None
-            return out, sample_out
+        return out, sample_out
 
-    def train(self, dataset_path, list_files, epochs, learning_rate=0.01, clip_low=-0.01, clip_high=0.01, r=0.01):
+    def train(self, dataset_path, list_files, epochs, learning_rate=0.01, clip_low=-0.01, clip_high=0.01, r=1, l=10):
         tf.reset_default_graph()
         input = tf.placeholder(tf.float32, shape=(None, self.image_shape[0], self.image_shape[1], 1), name='input')
         condition = tf.placeholder(tf.float32, shape=(None, self.image_shape[0], self.image_shape[1], 3),
                                    name='condition')
         target = tf.placeholder(tf.float32, shape=(None, self.image_shape[0], self.image_shape[1], 3), name='output')
-        g_logits = self.generator(input, condition)
+        is_training = tf.placeholder(tf.bool, name='is_training')
+        random_e = tf.placeholder(tf.float32, shape=[None, 1, 1, 1], name='random_e')
+
+        g_logits = self.generator(input, condition, is_training)
+
         d_logits_real = self.discriminator(target, condition, reuse=False)
         d_logits_fake = self.discriminator(g_logits, condition, reuse=True)
 
-        l1_loss = tf.reduce_mean(tf.reduce_sum(tf.abs(g_logits - input), axis=0))
-        g_loss = -tf.reduce_mean(d_logits_fake) + r * l1_loss
-        d_loss = -tf.reduce_mean(tf.abs(d_logits_fake - d_logits_real))
+        # l1_loss = tf.reduce_mean(tf.reduce_sum(tf.abs(g_logits - target), axis=[1, 2, 3]))
+        l2_loss = tf.reduce_mean(tf.reduce_sum(tf.square(g_logits - target), axis=[1, 2, 3]))
+        # print(l1_loss.shape)
+        # g_loss = -tf.reduce_mean(d_logits_fake)
+        eps = 1e-16
+        g_loss = -tf.reduce_mean(tf.log(d_logits_fake + eps))
+        # x_hat = random_e * target + (1 - random_e) * g_logits
+        # d_logits_xhat = self.discriminator(x_hat, condition, reuse=True)
+        # grads = tf.gradients(d_logits_xhat, [x_hat])[0]
+        # penalty = tf.reduce_mean(tf.square(tf.sqrt(tf.reduce_sum(tf.square(grads), axis=[1, 2, 3]) + eps) - 1))
+        # d_loss = tf.reduce_mean(d_logits_fake - d_logits_real) + l * penalty
+        d_loss = -tf.reduce_mean(tf.log(d_logits_real + eps) + tf.log(1 - d_logits_fake + eps))
         # tf.summary.scalar('g_loss', g_loss)
         # tf.summary.scalar('d_loss', d_loss)
 
         var_g = [var for var in tf.trainable_variables() if var.name.startswith('generator')]
         var_d = [var for var in tf.trainable_variables() if var.name.startswith('discriminator')]
+        # print(var_g)
+        # print(var_d)
+        d_optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(d_loss, var_list=var_d)
+        g_optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(g_loss, var_list=var_g)
+        g_pretrain = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(l2_loss, var_list=var_g)
 
-        d_optimizer = tf.train.RMSPropOptimizer(learning_rate=learning_rate).minimize(d_loss, var_list=var_d)
-        g_optimizer = tf.train.RMSPropOptimizer(learning_rate=learning_rate).minimize(g_loss, var_list=var_g)
+        # clip_d_var = [var.assign(tf.clip_by_value(var, clip_low, clip_high)) for var in var_d]
 
-        clip_d_var = [var.assign(tf.clip_by_value(var, clip_low, clip_high)) for var in var_d]
-
-        data_parser = DataParserV2(dataset_path, self.image_shape, list_files=list_files, batch_size=self.batch_size)
-        data_parser_test = DataParserV2(dataset_path, self.image_shape, list_files=list_files, batch_size=5)
+        data_parser = DataParserV2(dataset_path, self.image_shape, list_files=list_files, batch_size=self.batch_size,
+                                   max_length=1000)
+        # data_parser_test = DataParserV2(dataset_path, self.image_shape, list_files=list_files, batch_size=5)
         config = tf.ConfigProto()
         config.gpu_options.allow_growth = True
         losses = []
-        test_input = data_parser_test.get_batch_sketch()
-        test_target = data_parser_test.get_batch_raw()
-        test_condition = data_parser_test.get_batch_condition_add()
+        losses_pretrain = []
+
+        test_input = data_parser.get_batch_sketch()
+        test_target = data_parser.get_batch_raw()
+        test_condition = data_parser.get_batch_condition_add()
         test = {'input': test_input, 'target': test_target, 'condition': test_condition}
-        np.save('./results/test_data_3.npy', test)
+        np.save('./results/test_data_15.npy', test)
         outputs = []
+        outputs_pretrian = []
         with tf.Session(config=config) as sess:
-            # print('enter')
             # writer = tf.summary.FileWriter('./logs/train', sess.graph)
             # writer_val = tf.summary.FileWriter('./logs/val')
             saver = tf.train.Saver()
             # merged = tf.summary.merge_all()
             run_options = tf.RunOptions(report_tensor_allocations_upon_oom=True)
             sess.run(tf.global_variables_initializer())
-            sess.graph.finalize()
-            # print('initializing')
-            for epoch in range(epochs):
-                loss_g = 0
-                loss_d = 0
+
+            # pre-train generator
+            for g_epoch in range(20):
                 for i in range(data_parser.iteration):
                     batch_input = data_parser.get_batch_sketch()
                     # print(batch_input.dtype, batch_input.shape)
@@ -148,21 +186,60 @@ class Unet:
                     # print(batch_condition.dtype, batch_condition.shape)
                     data_parser.update_iterator()
 
-                    for _ in range(5):
+                    _, loss_l2 = sess.run([g_pretrain, l2_loss],
+                                          feed_dict={input: batch_input, condition: batch_condition,
+                                                     target: batch_target, is_training: True},
+                                          options=run_options)
+                    losses_pretrain.append(loss_l2)
+                    if i % 10 == 0:
+                        print(
+                            'Epoch: {}, Iteration: {}/{}, l1_loss: {}'.format(
+                                g_epoch + 1, i + 1, data_parser.iteration, loss_l2))
+                print('*' * 10,
+                      'Epoch {}/{} ...'.format(g_epoch + 1, epochs),
+                      'l1_loss: {:.4f} ...'.format(loss_l2),
+                      '*' * 10)
+                output_pre = sess.run(g_logits, feed_dict={input: test_input, condition: test_condition,
+                                                           target: test_target, is_training: False})
+                outputs_pretrian.append(output_pre)
+
+            for _ in range(10):
+                print('*' * 10)
+
+            for epoch in range(epochs):
+                loss_g = 0
+                loss_d = 0
+                i_d = int(5 - epoch // 10)
+                i_g = int(epoch // 10 + 2)
+                for i in range(data_parser.iteration):
+                    batch_input = data_parser.get_batch_sketch()
+                    # print(batch_input.dtype, batch_input.shape)
+                    batch_target = data_parser.get_batch_raw()
+                    # print(batch_target.dtype, batch_target.shape)
+                    batch_condition = data_parser.get_batch_condition_add()
+                    # print(batch_condition.dtype, batch_condition.shape)
+                    data_parser.update_iterator()
+
+                    for _ in range(i_d):
+                        e = np.random.uniform(0, 1, [batch_target.shape[0], 1, 1, 1])
+                        # e = tf.random_uniform(shape=[batch_target.shape[0], 1], minval=0, maxval=1)
                         _, loss_d = sess.run([d_optimizer, d_loss],
-                                             feed_dict={target: batch_target, input: batch_input,
-                                                        condition: batch_condition}, options=run_options)
-                        sess.run(clip_d_var)
+                                             feed_dict={input: batch_input, condition: batch_condition,
+                                                        target: batch_target, is_training: True, random_e: e},
+                                             options=run_options)
+                        # sess.run(clip_d_var)
                     # print('discriminator')
                     # print('clip')
-                    _, loss_g, loss_l1 = sess.run([g_optimizer, g_loss, l1_loss],
-                                                  feed_dict={input: batch_input, condition: batch_condition},
-                                                  options=run_options)
+                    for _ in range(i_g):
+                        _, loss_g = sess.run([g_optimizer, g_loss],
+                                             feed_dict={input: batch_input, condition: batch_condition,
+                                                        target: batch_target, is_training: True},
+                                             options=run_options)
                     # print('generator')
 
                     # log = sess.run(merged)
                     # writer.add_summary(log, epoch * data_parser_inputs.iteration + i + 1)
-                    losses.append([loss_d, loss_g, loss_l1])
+                    losses.append([loss_d, loss_g])
                     if i % 10 == 0:
                         # log_val, val_loss_g, val_loss_d = sess.run([merged, g_loss, d_loss],
                         #                                            feed_dict={input: batch_input,
@@ -170,34 +247,40 @@ class Unet:
                         #                                                       target: batch_target})
                         # writer_val.add_summary(log_val, epoch * data_parser_inputs.iteration + i + 1)
                         print(
-                            'Epoch: {}, Iteration: {}/{}, g_loss: {}, d_loss: {}, l1 loss: {}'.format(
-                                epoch + 1, i + 1, data_parser.iteration, loss_g, loss_d, loss_l1))
+                            'Epoch: {}, Iteration: {}/{}, g_loss: {}, d_loss: {}'.format(
+                                epoch + 1, i + 1, data_parser.iteration, loss_g, loss_d))
                 print('*' * 10,
                       'Epoch {}/{} ...'.format(epoch + 1, epochs),
-                      'd_loss: {:.4f} ...'.format(loss_d),
                       'g_loss: {:.4f} ...'.format(loss_g),
+                      'd_loss: {:.4f} ...'.format(loss_d),
+                      # 'l1_loss: {:.4f} ...'.format(loss_l1),
                       '*' * 10)
-                output = sess.run(g_logits, feed_dict={input: test_input, condition: test_condition})
+                output = sess.run(g_logits, feed_dict={input: test_input, condition: test_condition,
+                                                       target: test_target, is_training: False})
                 outputs.append(output)
-                saver.save(sess, './checkpoints/unet3/checkpoint_{}.ckpt'.format(epoch + 1))
+                # saver.save(sess, './checkpoints/unet8/checkpoint_{}.ckpt'.format(epoch + 1))
 
-            saver.save(sess, './checkpoints/unet3/model.ckpt')
-            np.save('./results/predicted_3.npy', outputs)
-        return losses
+            saver.save(sess, './checkpoints/unet15/model.ckpt')
+            np.save('./results/predicted_15.npy', outputs)
+            np.save('./results/predicted_pre_15.npy', outputs_pretrian)
+        return losses, losses_pretrain
 
 
 if __name__ == '__main__':
     dataset_path = '../dataset'
-    resize_shape = (256, 256)
+    resize_shape = (128, 128)
     list_files = ['../dataset/image_list_1.txt']
-    batch_size = 16
-    # data_parser = DataParserV2(dataset_path, resize_shape, list_files, batch_size)
+    batch_size = 50
+    l1_rate = 0.005
+    data_parser = DataParserV2(dataset_path, resize_shape, list_files, batch_size)
 
     model = Unet(resize_shape, batch_size=batch_size)
-    losses = model.train(dataset_path, list_files, 10, learning_rate=0.0005)
-    np.save('./logs/train/losses_2.npy', np.asarray(losses))
+
+    losses, losses_pretrain = model.train(dataset_path, list_files, 50, learning_rate=0.00001, r=l1_rate)
+    np.save('./logs/train/losses_15.npy', np.asarray(losses))
 
     losses = np.asarray(losses)
+    losses_pretrain = np.asarray(losses_pretrain)
     plt.plot(losses[:, 0])
     plt.title('d loss')
     plt.xlabel('Iteration')
@@ -210,15 +293,17 @@ if __name__ == '__main__':
     plt.ylabel('Loss')
     plt.show()
 
-    plt.plot(losses[:, 2])
+    plt.plot(losses_pretrain)
     plt.title('l1 loss')
     plt.xlabel('Iteration')
     plt.ylabel('Loss')
     plt.show()
 
-    imgs = np.load('./results/predicted_3.npy')
-    test = np.load('./results/test_data_3.npy')
-    img = test.item()['target'][0]
+    imgs = np.load('./results/predicted_15.npy')
+    imgs_pre = np.load('./results/predicted_pre_16.npy')
+    test = np.load('./results/test_data_15.npy')
+    img = test.item()['target'][2]
+    img = (img + 1) / 2
     img = (1 - img) * 255
     img = img.astype(np.uint8)
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
@@ -226,11 +311,25 @@ if __name__ == '__main__':
     plt.show()
 
     plt.figure()
-    for i in range(imgs.shape[0]):
-        img = imgs[i, 0]
+    for i in range(20):
+        img = imgs_pre[i, 2]
+        img = (img + 1) / 2
         img = (1 - img) * 255
         img = img.astype(np.uint8)
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        plt.subplot(2, 5, i + 1)
+        # print(img.shape)
+        plt.subplot(4, 5, i + 1)
+        plt.imshow(img)
+    plt.show()
+
+    plt.figure()
+    for i in range(20):
+        img = imgs[i + 30, 2]
+        img = (img + 1) / 2
+        img = (1 - img) * 255
+        img = img.astype(np.uint8)
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        # print(img.shape)
+        plt.subplot(4, 5, i + 1)
         plt.imshow(img)
     plt.show()
