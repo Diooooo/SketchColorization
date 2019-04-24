@@ -77,6 +77,18 @@ class DataParserV2:
             raws.append((1 - raw_img / 255) * 2 - 1)
         return np.asarray(raws)
 
+    def get_batch_raw_gray(self):
+        indices = self.get_indices()
+        raws_gray = []
+        for id in indices:
+            raw_name = os.path.join(self.raw_image_path, self.images_name[id])
+            raw_img = cv2.imread(raw_name).astype(np.float32)
+            raw_img = cv2.resize(raw_img, self.resize_shape)
+            raw_img = cv2.cvtColor(raw_img, cv2.COLOR_BGR2GRAY)
+            raw_img = np.expand_dims(raw_img, axis=2)
+            raws_gray.append((1 - raw_img / 255) * 2 - 1)
+        return np.asarray(raws_gray)
+
     def get_batch_sketch(self):
         indices = self.get_indices()
         sketches = []
@@ -84,14 +96,16 @@ class DataParserV2:
             sketch_name = os.path.join(self.sketch_path, self.images_name[id].split('.')[0] + '_sketch.jpg')
             sketch = cv2.imread(sketch_name, 0).astype(np.float32)
             sketch = cv2.resize(sketch, self.resize_shape)
-            noise = np.random.normal(loc=0, scale=1, size=1000)
-            pos = np.random.permutation(self.resize_shape[0] * self.resize_shape[1])[:1000]
-            noise_channel = np.zeros_like(sketch)
-            for i, val in enumerate(pos):
-                noise_channel[val // self.resize_shape[0]][val % self.resize_shape[1]] = noise[i]
+            noise = np.random.normal(loc=0, scale=1, size=sketch.shape)
+            #pos = np.random.permutation(self.resize_shape[0] * self.resize_shape[1])[:1000]
+            #noise_channel = np.zeros_like(sketch)
+            #for i, val in enumerate(pos):
+            #    noise_channel[val // self.resize_shape[0]][val % self.resize_shape[1]] = noise[i]
             sketch = np.expand_dims(sketch, axis=2)
-            noise_channel = np.expand_dims(noise_channel, axis=2)
-            sketch = 1 - sketch / 255 + noise_channel
+            noise_channel = np.expand_dims(noise, axis=2)
+            #sketch = 1 - sketch / 255 + noise_channel
+            sketch = 1 - sketch / 255
+            sketch = np.concatenate((sketch, noise_channel), axis=2)
             sketches.append(sketch * 2 - 1)
         return np.asarray(sketches)
 
