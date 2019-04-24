@@ -114,15 +114,15 @@ class Unet:
                 sample_out = None
         return out, sample_out
 
-    def train(self, dataset_path, list_files, epochs, learning_rate=0.01, clip_low=-0.01, clip_high=0.01, r=1, l=10,
+    def train(self, dataset_path, list_files, epochs, epochs_pre=20, learning_rate=0.01, clip_low=-0.01, clip_high=0.01, r=1, l=10,
               save_index=1):
         tf.reset_default_graph()
-        input = tf.placeholder(tf.float32, shape=(None, self.image_shape[0], self.image_shape[1], 2), name='input')
+        input = tf.placeholder(tf.float32, shape=(None, self.image_shape[0], self.image_shape[1], 1), name='input')
         condition = tf.placeholder(tf.float32, shape=(None, self.image_shape[0], self.image_shape[1], 3),
                                    name='condition')
         target = tf.placeholder(tf.float32, shape=(None, self.image_shape[0], self.image_shape[1], 1), name='output')
         is_training = tf.placeholder(tf.bool, name='is_training')
-        random_e = tf.placeholder(tf.float32, shape=[None, 1, 1, 1], name='random_e')
+        # random_e = tf.placeholder(tf.float32, shape=[None, 1, 1, 1], name='random_e')
 
         g_logits = self.generator(input, condition, is_training)
 
@@ -208,62 +208,62 @@ class Unet:
             for _ in range(10):
                 print('*' * 10)
 
-            for epoch in range(epochs):
-                loss_g = 0
-                loss_d = 0
-                i_d = int(5 - epoch // 20)
-                i_g = int(epoch // 20 + 2)
-                for i in range(data_parser.iteration):
-                    batch_input = data_parser.get_batch_sketch()
-                    # print(batch_input.dtype, batch_input.shape)
-                    batch_target = data_parser.get_batch_raw_gray()
-                    # print(batch_target.dtype, batch_target.shape)
-                    batch_condition = data_parser.get_batch_condition_add()
-                    # print(batch_condition.dtype, batch_condition.shape)
-                    data_parser.update_iterator()
-
-                    for _ in range(i_d):
-                        e = np.random.uniform(0, 1, [batch_target.shape[0], 1, 1, 1])
-                        # e = tf.random_uniform(shape=[batch_target.shape[0], 1], minval=0, maxval=1)
-                        _, loss_d = sess.run([d_optimizer, d_loss],
-                                             feed_dict={input: batch_input, condition: batch_condition,
-                                                        target: batch_target, is_training: True, random_e: e},
-                                             options=run_options)
-                        # sess.run(clip_d_var)
-                    # print('discriminator')
-                    # print('clip')
-                    for _ in range(i_g):
-                        _, loss_g = sess.run([g_optimizer, g_loss],
-                                             feed_dict={input: batch_input, condition: batch_condition,
-                                                        target: batch_target, is_training: True},
-                                             options=run_options)
-                    # print('generator')
-
-                    # log = sess.run(merged)
-                    # writer.add_summary(log, epoch * data_parser_inputs.iteration + i + 1)
-                    losses.append([loss_d, loss_g])
-                    if i % 10 == 0:
-                        # log_val, val_loss_g, val_loss_d = sess.run([merged, g_loss, d_loss],
-                        #                                            feed_dict={input: batch_input,
-                        #                                                       condition: batch_condition,
-                        #                                                       target: batch_target})
-                        # writer_val.add_summary(log_val, epoch * data_parser_inputs.iteration + i + 1)
-                        print(
-                            'Epoch: {}, Iteration: {}/{}, g_loss: {}, d_loss: {}'.format(
-                                epoch + 1, i + 1, data_parser.iteration, loss_g, loss_d))
-                print('*' * 10,
-                      'Epoch {}/{} ...'.format(epoch + 1, epochs),
-                      'g_loss: {:.4f} ...'.format(loss_g),
-                      'd_loss: {:.4f} ...'.format(loss_d),
-                      # 'l1_loss: {:.4f} ...'.format(loss_l1),
-                      '*' * 10)
-                output = sess.run(g_logits, feed_dict={input: test_input, condition: test_condition,
-                                                       target: test_target, is_training: False})
-                outputs.append(output)
-                # saver.save(sess, './checkpoints/unet8/checkpoint_{}.ckpt'.format(epoch + 1))
-
+            # for epoch in range(epochs):
+            #     loss_g = 0
+            #     loss_d = 0
+            #     i_d = int(5 - epoch // 20)
+            #     i_g = int(epoch // 20 + 2)
+            #     for i in range(data_parser.iteration):
+            #         batch_input = data_parser.get_batch_sketch()
+            #         # print(batch_input.dtype, batch_input.shape)
+            #         batch_target = data_parser.get_batch_raw_gray()
+            #         # print(batch_target.dtype, batch_target.shape)
+            #         batch_condition = data_parser.get_batch_condition_add()
+            #         # print(batch_condition.dtype, batch_condition.shape)
+            #         data_parser.update_iterator()
+            #
+            #         for _ in range(i_d):
+            #             # e = np.random.uniform(0, 1, [batch_target.shape[0], 1, 1, 1])
+            #             # e = tf.random_uniform(shape=[batch_target.shape[0], 1], minval=0, maxval=1)
+            #             _, loss_d = sess.run([d_optimizer, d_loss],
+            #                                  feed_dict={input: batch_input, condition: batch_condition,
+            #                                             target: batch_target, is_training: True},
+            #                                  options=run_options)
+            #             # sess.run(clip_d_var)
+            #         # print('discriminator')
+            #         # print('clip')
+            #         for _ in range(i_g):
+            #             _, loss_g = sess.run([g_optimizer, g_loss],
+            #                                  feed_dict={input: batch_input, condition: batch_condition,
+            #                                             target: batch_target, is_training: True},
+            #                                  options=run_options)
+            #         # print('generator')
+            #
+            #         # log = sess.run(merged)
+            #         # writer.add_summary(log, epoch * data_parser_inputs.iteration + i + 1)
+            #         losses.append([loss_d, loss_g])
+            #         if i % 10 == 0:
+            #             # log_val, val_loss_g, val_loss_d = sess.run([merged, g_loss, d_loss],
+            #             #                                            feed_dict={input: batch_input,
+            #             #                                                       condition: batch_condition,
+            #             #                                                       target: batch_target})
+            #             # writer_val.add_summary(log_val, epoch * data_parser_inputs.iteration + i + 1)
+            #             print(
+            #                 'Epoch: {}, Iteration: {}/{}, g_loss: {}, d_loss: {}'.format(
+            #                     epoch + 1, i + 1, data_parser.iteration, loss_g, loss_d))
+            #     print('*' * 10,
+            #           'Epoch {}/{} ...'.format(epoch + 1, epochs),
+            #           'g_loss: {:.4f} ...'.format(loss_g),
+            #           'd_loss: {:.4f} ...'.format(loss_d),
+            #           # 'l1_loss: {:.4f} ...'.format(loss_l1),
+            #           '*' * 10)
+            #     output = sess.run(g_logits, feed_dict={input: test_input, condition: test_condition,
+            #                                            target: test_target, is_training: False})
+            #     outputs.append(output)
+            #     # saver.save(sess, './checkpoints/unet8/checkpoint_{}.ckpt'.format(epoch + 1))
+            os.mkdir('./checkpoints/unet{}'.format(save_index))
             saver.save(sess, './checkpoints/unet{}/model.ckpt'.format(save_index))
-            np.save('./results/predicted_{}.npy'.format(save_index), outputs)
+            # np.save('./results/predicted_{}.npy'.format(save_index), outputs)
             np.save('./results/predicted_pre_{}.npy'.format(save_index), outputs_pretrian)
         return losses, losses_pretrain
 
@@ -274,43 +274,43 @@ if __name__ == '__main__':
     list_files = ['../dataset/image_list_1.txt']
     batch_size = 50
     l1_rate = 0.005
-    index = 16
+    index = 18
 
-    # model = Unet(resize_shape, batch_size=batch_size)
-    #
-    # losses, losses_pretrain = model.train(dataset_path, list_files, 20, learning_rate=0.00001, save_index=index)
-    # np.save('./logs/train/losses_{}.npy'.format(index), np.asarray(losses))
-    # np.save('./logs/train/losses_pre_{}.npy'.format(index), np.asarray(losses_pretrain))
-    #
-    losses = np.load('./logs/train/losses_{}.npy'.format(index))
+    model = Unet(resize_shape, batch_size=batch_size)
+
+    losses, losses_pretrain = model.train(dataset_path, list_files, 20, epochs_pre=50, learning_rate=0.0001, save_index=index)
+    np.save('./logs/train/losses_{}.npy'.format(index), np.asarray(losses))
+    np.save('./logs/train/losses_pre_{}.npy'.format(index), np.asarray(losses_pretrain))
+
+    # losses = np.load('./logs/train/losses_{}.npy'.format(index))
     # losses_pretrain = np.load('./logs/train/losses_pre_{}.npy'.format(index))
-    # losses_pretrain = np.asarray(losses_pretrain)
+    losses_pretrain = np.asarray(losses_pretrain)
     # losses = np.asarray(losses)
     # losses_pretrain = np.asarray(losses_pretrain)
-    plt.plot(losses[:, 0])
-    plt.title('d loss')
-    plt.xlabel('Iteration')
-    plt.ylabel('Loss')
-    plt.show()
+    # plt.plot(losses[:, 0])
+    # plt.title('d loss')
+    # plt.xlabel('Iteration')
+    # plt.ylabel('Loss')
+    # plt.show()
     #
-    plt.plot(losses[:, 1])
-    plt.title('g loss')
-    plt.xlabel('Iteration')
-    plt.ylabel('Loss')
-    plt.show()
-    #
-    # plt.plot(losses_pretrain)
-    # plt.title('l1 loss')
+    # plt.plot(losses[:, 1])
+    # plt.title('g loss')
     # plt.xlabel('Iteration')
     # plt.ylabel('Loss')
     # plt.show()
 
-    imgs = np.load('./results/predicted_{}.npy'.format(index))
+    plt.plot(losses_pretrain)
+    plt.title('l1 loss')
+    plt.xlabel('Iteration')
+    plt.ylabel('Loss')
+    plt.show()
+
+    # imgs = np.load('./results/predicted_{}.npy'.format(index))
     imgs_pre = np.load('./results/predicted_pre_{}.npy'.format(index))
     test = np.load('./results/test_data_{}.npy'.format(index))
 
     i_image = 0
-    img = test.item()['input'][i_image]
+    img = test.item()['target'][i_image]
     img = (img + 1) / 2
     img = (1 - img) * 255
     # img = img.astype(np.uint8)
@@ -330,14 +330,14 @@ if __name__ == '__main__':
         plt.imshow(img.reshape(128, 128), cmap=plt.cm.gray)
     plt.show()
 
-    plt.figure()
-    for i in range(20):
-        img = imgs[i, i_image]
-        img = (img - np.min(img)) / (np.max(img) - np.min(img))
-        img = (1 - img) * 255
-        # img = img.astype(np.uint8)
-        # img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        # print(img.shape)
-        plt.subplot(4, 5, i + 1)
-        plt.imshow(img.reshape(128, 128), cmap=plt.cm.gray)
-    plt.show()
+    # plt.figure()
+    # for i in range(20):
+    #     img = imgs[i, i_image]
+    #     img = (img - np.min(img)) / (np.max(img) - np.min(img))
+    #     img = (1 - img) * 255
+    #     # img = img.astype(np.uint8)
+    #     # img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    #     # print(img.shape)
+    #     plt.subplot(4, 5, i + 1)
+    #     plt.imshow(img.reshape(128, 128), cmap=plt.cm.gray)
+    # plt.show()
