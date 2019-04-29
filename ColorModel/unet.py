@@ -31,14 +31,18 @@ class Unet:
                 layer = tf.nn.leaky_relu(layer)
             decode1, _ = self.cnn_block(layer, 512, (3, 3), sample_type='deconv', scope_name='decode1',
                                         deconv_concatenate=encode4, is_train=is_train)
+            print(decode1.shape)
             decode2, _ = self.cnn_block(decode1, 256, (3, 3), sample_type='deconv', scope_name='decode2',
                                         deconv_concatenate=encode3, is_train=is_train)
+            print(decode2.shape)
             decode3, _ = self.cnn_block(decode2, 128, (3, 3), sample_type='deconv', scope_name='decode3',
                                         deconv_concatenate=encode2, is_train=is_train)
+            print(decode3.shape)
             decode4, _ = self.cnn_block(decode3, 64, (3, 3), sample_type='deconv', scope_name='decode4',
                                         deconv_concatenate=encode1, is_train=is_train)
+            print(decode4.shape)
 
-            g_logits = tf.layers.conv2d(decode4, 1, (3, 3), padding='same', name='logits', activation=tf.nn.tanh)
+            g_logits = tf.layers.conv2d(decode4, 3, (3, 3), padding='same', name='logits', activation=tf.nn.tanh)
 
             # loss = tf.nn.sigmoid_cross_entropy_with_logits(labels=self.target, logits=g_logits)
             # cost = tf.reduce_mean(loss)
@@ -114,13 +118,14 @@ class Unet:
                 sample_out = None
         return out, sample_out
 
-    def train(self, dataset_path, list_files, epochs, epochs_pre=20, learning_rate=0.01, clip_low=-0.01, clip_high=0.01, r=1, l=10,
+    def train(self, dataset_path, list_files, epochs, epochs_pre=20, learning_rate=0.01, clip_low=-0.01, clip_high=0.01,
+              r=1, l=10,
               save_index=1):
         tf.reset_default_graph()
         input = tf.placeholder(tf.float32, shape=(None, self.image_shape[0], self.image_shape[1], 1), name='input')
         condition = tf.placeholder(tf.float32, shape=(None, self.image_shape[0], self.image_shape[1], 3),
                                    name='condition')
-        target = tf.placeholder(tf.float32, shape=(None, self.image_shape[0], self.image_shape[1], 1), name='output')
+        target = tf.placeholder(tf.float32, shape=(None, self.image_shape[0], self.image_shape[1], 3), name='output')
         is_training = tf.placeholder(tf.bool, name='is_training')
         # random_e = tf.placeholder(tf.float32, shape=[None, 1, 1, 1], name='random_e')
 
@@ -130,7 +135,7 @@ class Unet:
         d_logits_fake = self.discriminator(g_logits, condition, reuse=True)
 
         # l1_loss = tf.reduce_mean(tf.reduce_sum(tf.abs(g_logits - target), axis=[1, 2, 3]))
-        l2_loss = tf.reduce_mean(tf.reduce_sum(tf.square(g_logits - target), axis=[1, 2, 3]))
+        # l2_loss = tf.reduce_mean(tf.reduce_sum(tf.square(g_logits - target), axis=[1, 2, 3]))
         # print(l1_loss.shape)
         # g_loss = -tf.reduce_mean(d_logits_fake)
         eps = 1e-16
@@ -146,6 +151,7 @@ class Unet:
 
         var_g = [var for var in tf.trainable_variables() if var.name.startswith('generator')]
         var_d = [var for var in tf.trainable_variables() if var.name.startswith('discriminator')]
+        var_bn = [var for var in tf.trainable_variables() if 'batch_normalization' in var.name]
         # print(var_g)
         # print(var_d)
         d_optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(d_loss, var_list=var_d)
@@ -155,7 +161,7 @@ class Unet:
         # clip_d_var = [var.assign(tf.clip_by_value(var, clip_low, clip_high)) for var in var_d]
 
         data_parser = DataParserV2(dataset_path, self.image_shape, list_files=list_files, batch_size=self.batch_size,
-                                   max_length=1000)
+                                   max_length=10000)
         # data_parser_test = DataParserV2(dataset_path, self.image_shape, list_files=list_files, batch_size=5)
         config = tf.ConfigProto()
         config.gpu_options.allow_growth = True
@@ -163,12 +169,17 @@ class Unet:
         losses_pretrain = []
 
         test_input = data_parser.get_batch_sketch()
-        test_target = data_parser.get_batch_raw_gray()
+        test_target = data_parser.get_batch_raw()
         test_condition = data_parser.get_batch_condition_add()
         test = {'input': test_input, 'target': test_target, 'condition': test_condition}
+        # test = {'input': test_input, 'target': test_target}
         np.save('./results/test_data_{}.npy'.format(save_index), test)
         outputs = []
         outputs_pretrian = []
+        try:
+            os.makedirs('./checkpoints/unet{}'.format(save_index))
+        except FileExistsError as e:
+            print(e)
         with tf.Session(config=config) as sess:
             # writer = tf.summary.FileWriter('./logs/train', sess.graph)
             # writer_val = tf.summary.FileWriter('./logs/val')
@@ -178,18 +189,18 @@ class Unet:
             sess.run(tf.global_variables_initializer())
 
             # pre-train generator
-            for g_epoch in range(20):
+            for g_epoch in range(epochs_pre):
                 for i in range(data_parser.iteration):
                     batch_input = data_parser.get_batch_sketch()
                     # print(batch_input.dtype, batch_input.shape)
-                    batch_target = data_parser.get_batch_raw_gray()
+                    batch_target = data_parser.get_batch_raw()
                     # print(batch_target.dtype, batch_target.shape)
-                    batch_condition = data_parser.get_batch_condition_add()
+                    # batch_condition = data_parser.get_batch_condition_add()
                     # print(batch_condition.dtype, batch_condition.shape)
                     data_parser.update_iterator()
 
                     _, loss_l2 = sess.run([g_pretrain, l2_loss],
-                                          feed_dict={input: batch_input, condition: batch_condition,
+                                          feed_dict={input: batch_input,
                                                      target: batch_target, is_training: True},
                                           options=run_options)
                     losses_pretrain.append(loss_l2)
@@ -198,10 +209,10 @@ class Unet:
                             'Epoch: {}, Iteration: {}/{}, l1_loss: {}'.format(
                                 g_epoch + 1, i + 1, data_parser.iteration, loss_l2))
                 print('*' * 10,
-                      'Epoch {}/{} ...'.format(g_epoch + 1, epochs),
+                      'Epoch {}/{} ...'.format(g_epoch + 1, epochs_pre),
                       'l1_loss: {:.4f} ...'.format(loss_l2),
                       '*' * 10)
-                output_pre = sess.run(g_logits, feed_dict={input: test_input, condition: test_condition,
+                output_pre = sess.run(g_logits, feed_dict={input: test_input,
                                                            target: test_target, is_training: False})
                 outputs_pretrian.append(output_pre)
 
@@ -261,10 +272,9 @@ class Unet:
             #                                            target: test_target, is_training: False})
             #     outputs.append(output)
             #     # saver.save(sess, './checkpoints/unet8/checkpoint_{}.ckpt'.format(epoch + 1))
-            os.mkdir('./checkpoints/unet{}'.format(save_index))
             saver.save(sess, './checkpoints/unet{}/model.ckpt'.format(save_index))
-            # np.save('./results/predicted_{}.npy'.format(save_index), outputs)
-            np.save('./results/predicted_pre_{}.npy'.format(save_index), outputs_pretrian)
+            # np.save('./results/predicted_{}.npy'.format(save_index), np.asarray(outputs))
+            np.save('./results/predicted_pre_{}.npy'.format(save_index), np.asarray(outputs_pretrian))
         return losses, losses_pretrain
 
 
@@ -274,19 +284,19 @@ if __name__ == '__main__':
     list_files = ['../dataset/image_list_1.txt']
     batch_size = 50
     l1_rate = 0.005
-    index = 18
+    index = 20
 
     model = Unet(resize_shape, batch_size=batch_size)
 
-    losses, losses_pretrain = model.train(dataset_path, list_files, 20, epochs_pre=50, learning_rate=0.0001, save_index=index)
-    np.save('./logs/train/losses_{}.npy'.format(index), np.asarray(losses))
-    np.save('./logs/train/losses_pre_{}.npy'.format(index), np.asarray(losses_pretrain))
+    losses, losses_pretrain = model.train(dataset_path, list_files, 20, epochs_pre=10, learning_rate=0.0001,
+                                          save_index=index)
+    # np.save('./logs/train/losses_{}.npy'.format(index), np.asarray(losses))
+    # np.save('./logs/train/losses_pre_{}.npy'.format(index), np.asarray(losses_pretrain))
 
     # losses = np.load('./logs/train/losses_{}.npy'.format(index))
     # losses_pretrain = np.load('./logs/train/losses_pre_{}.npy'.format(index))
-    losses_pretrain = np.asarray(losses_pretrain)
     # losses = np.asarray(losses)
-    # losses_pretrain = np.asarray(losses_pretrain)
+    losses_pretrain = np.asarray(losses_pretrain)
     # plt.plot(losses[:, 0])
     # plt.title('d loss')
     # plt.xlabel('Iteration')
@@ -309,25 +319,25 @@ if __name__ == '__main__':
     imgs_pre = np.load('./results/predicted_pre_{}.npy'.format(index))
     test = np.load('./results/test_data_{}.npy'.format(index))
 
-    i_image = 0
-    img = test.item()['target'][i_image]
+    i_image = 1
+    img = test.item().get('target')[i_image]
     img = (img + 1) / 2
-    img = (1 - img) * 255
+    img = (1 - img)
     # img = img.astype(np.uint8)
-    # img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    plt.imshow(img.reshape(128, 128), cmap=plt.cm.gray)
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    plt.imshow(img)
     plt.show()
 
     plt.figure()
     for i in range(20):
-        img = imgs_pre[i, i_image]
-        img = (img - np.min(img)) / (np.max(img) - np.min(img))
-        img = (1 - img) * 255
+        img = imgs_pre[i+10, i_image]
+        img = (img + 1) / 2
+        img = (1 - img)
         # img = img.astype(np.uint8)
-        # img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         # print(img.shape)
         plt.subplot(4, 5, i + 1)
-        plt.imshow(img.reshape(128, 128), cmap=plt.cm.gray)
+        plt.imshow(img)
     plt.show()
 
     # plt.figure()

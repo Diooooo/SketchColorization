@@ -7,3 +7,4 @@ dataset/*.jpg
 *logs*
 *results/
 *checkpoints*
+*.npy
