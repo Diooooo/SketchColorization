@@ -167,7 +167,7 @@ if __name__ == "__main__":
             print('Saved [{}]'.format(os.path.join(color_hint_output_each, img_num + '_colorhint.jpg')),
                   '--no.{}'.format(i + 1))
 
-            color_hint_whiteout = generate_whiteout(color_hint, (10, 10), 10)  # to be determined
+            color_hint_whiteout = generate_whiteout(color_hint, (20, 20), 10)  # to be determined
             cv2.imwrite(os.path.join(color_hint_whiteout_output_each, img_num + '_whiteout.jpg'), color_hint_whiteout)
             print('Saved [{}]'.format(os.path.join(color_hint_whiteout_output_each, img_num + '_whiteout.jpg')),
                   '--no.{}'.format(i + 1))

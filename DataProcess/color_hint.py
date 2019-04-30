@@ -2,6 +2,7 @@ import numpy as np
 import cv2
 import matplotlib.pyplot as plt
 import random
+from scipy.ndimage import gaussian_filter
 
 
 # import tensorflow as tf
@@ -31,13 +32,16 @@ def generate_color_map(img):
     :param img: original image(single)
     :return: color map(as the initial color hit)
     """
-    blurred = median_pyramid(img, 4)
-    blurred = cv2.GaussianBlur(blurred, (3, 3), 1)
-    blurred = median_pyramid(blurred, 4)
-    blurred = cv2.GaussianBlur(blurred, (3, 3), 1)
-    blurred = median_pyramid(blurred, 4)
-    blurred = cv2.GaussianBlur(blurred, (3, 3), 1)
-    blurred = cv2.resize(blurred, (img.shape[1], img.shape[0]), interpolation=cv2.INTER_CUBIC)
+    # blurred = median_pyramid(img, 4)
+    # blurred = cv2.GaussianBlur(blurred, (3, 3), 1)
+    # blurred = median_pyramid(blurred, 4)
+    # blurred = cv2.GaussianBlur(blurred, (3, 3), 1)
+    # blurred = median_pyramid(blurred, 4)
+    # blurred = cv2.GaussianBlur(blurred, (3, 3), 1)
+    # blurred = cv2.resize(blurred, (img.shape[1], img.shape[0]), interpolation=cv2.INTER_CUBIC)
+    blurred = np.zeros_like(img)
+    for i in range(3):
+        blurred[:, :, i] = gaussian_filter(img[:, :, i], 35)
     return blurred.astype(np.uint8)
 
 
