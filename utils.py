@@ -92,7 +92,7 @@ def images2npy(data_dir, list_file, resize_shape, save_dir):
     color_blocks = []
     for i, name in enumerate(img_names):
         img_name = name.strip('\n')
-        raw_image = cv2.imread(os.path.join(os.path.join(data_dir, 'raw_image/{:03d}'.format(int(index))), img_name))
+        raw_image = cv2.imread(os.path.join(os.path.join(data_dir, 'raw_image'), img_name))
         raw_image = cv2.resize(raw_image, resize_shape)
 
         img_num = img_name.split('/')[-1].split('.')[0]  # 'str'
@@ -120,6 +120,7 @@ def images2npy(data_dir, list_file, resize_shape, save_dir):
         whiteouts.append(whiteout.astype(np.uint8))
         color_blocks.append(color_block.astype(np.uint8))
         print('Saved [{}]'.format(img_name), '--no.{}'.format(i + 1))
+    os.mkdir(os.path.join(save_dir, '{:03d}'.format(int(index))))
     np.save(os.path.join(os.path.join(save_dir, '{:03d}'.format(int(index))), 'raw.npy'), raw_imgs)
     np.save(os.path.join(os.path.join(save_dir, '{:03d}'.format(int(index))), 'sketch.npy'), sketches)
     np.save(os.path.join(os.path.join(save_dir, '{:03d}'.format(int(index))), 'color_hint.npy'), color_hints)
@@ -130,7 +131,13 @@ def images2npy(data_dir, list_file, resize_shape, save_dir):
 
 if __name__ == "__main__":
     # generate_img_file('/media/bilin/MyPassport/zerochain', './dataset')
-    for i in range(1, 9, 1):
-        list_file = './dataset/image_list_{:d}.txt'.format(i)
-        move_files_by_namelist('/media/bilin/MyPassport/zerochain', '/media/bilin/MyPassport/zerochain', list_file)
-        print('*' * 20, 'Success move images listed in ', list_file, '*' * 20)
+    # for i in range(1, 9, 1):
+    #     list_file = './dataset/image_list_{:d}.txt'.format(i)
+    #     move_files_by_namelist('/media/bilin/MyPassport/zerochain', '/media/bilin/MyPassport/zerochain', list_file)
+    #     print('*' * 20, 'Success move images listed in ', list_file, '*' * 20)
+
+    list_file = './dataset/image_list_1.txt'
+    dataset_path = '/media/bilin/MyPassport/data/dataset'
+    save_path = './dataset'
+    resize_shape = (256, 256)
+    images2npy(dataset_path, list_file, resize_shape, save_path)

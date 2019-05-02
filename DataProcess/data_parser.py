@@ -178,8 +178,8 @@ class DataParserV3:
 
         self.raw_images = np.load(os.path.join(os.path.join(self.dataset_path, '{:03d}'.format(index)), 'raw.npy'))
         self.sketches = np.load(os.path.join(os.path.join(self.dataset_path, '{:03d}'.format(index)), 'sketch.npy'))
-        self.color_hints = np.load(
-            os.path.join(os.path.join(self.dataset_path, '{:03d}'.format(index)), 'color_hint.npy'))
+        # self.color_hints = np.load(
+        #     os.path.join(os.path.join(self.dataset_path, '{:03d}'.format(index)), 'color_hint.npy'))
         self.color_hint_whiteouts = np.load(
             os.path.join(os.path.join(self.dataset_path, '{:03d}'.format(index)), 'whiteout.npy'))
         self.color_blocks = np.load(
@@ -226,10 +226,10 @@ class DataParserV3:
         sketches = 1 - sketches / 255 + noise_channel
         return np.expand_dims(sketches, axis=3)
 
-    def get_batch_color_hint(self):
-        indices = self.get_indices()
-        res = self.color_hints[indices].astype(np.float32)
-        return 1 - res / 255
+    # def get_batch_color_hint(self):
+    #     indices = self.get_indices()
+    #     res = self.color_hints[indices].astype(np.float32)
+    #     return 1 - res / 255
 
     def get_batch_color_hint_whiteout(self):
         indices = self.get_indices()
@@ -254,32 +254,31 @@ class DataParserV3:
 
 
 if __name__ == "__main__":
-    data_parser = DataParserV2('../dataset', (512, 512), list_files=['../dataset/image_list_1.txt'], batch_size=5)
+    data_parser = DataParserV3('/media/bilin/MyPassport/data/dataset', (256, 256), 1, batch_size=1)
     condition = data_parser.get_batch_condition_add()
     raw = data_parser.get_batch_raw()
-    raw = (raw + 1) / 2
     raw = (1 - raw) * 255
     raw = cv2.cvtColor(raw[0], cv2.COLOR_BGR2RGB)
 
     whiteout = data_parser.get_batch_color_hint_whiteout()
-    whiteout = (whiteout + 1) / 2
     whiteout = (1 - whiteout) * 255
     whiteout = cv2.cvtColor(whiteout[0], cv2.COLOR_BGR2RGB)
 
-    img = (condition - 1) / 2
-    img = (1 - img) * 255
-    img = cv2.cvtColor(img[0], cv2.COLOR_BGR2RGB)
+    condition = data_parser.get_batch_condition_add()
+    condition = (1 - condition) * 255
+    condition = cv2.cvtColor(condition[0], cv2.COLOR_BGR2RGB)
 
     sketch = data_parser.get_batch_sketch()
-    sketch = (sketch + 1) / 2
     sketch = (1 - sketch) * 255
     print(sketch.shape)
 
     plt.figure()
-    plt.subplot(1, 3, 1)
+    plt.subplot(2, 2, 1)
     plt.imshow(raw.astype(np.uint8))
-    plt.subplot(1, 3, 2)
+    plt.subplot(2, 2, 2)
     plt.imshow(whiteout.astype(np.uint8))
-    plt.subplot(1, 3, 3)
-    plt.imshow(sketch[0].reshape(512, 512), cmap=plt.cm.gray)
+    plt.subplot(2, 2, 3)
+    plt.imshow(sketch[0].reshape(256, 256), cmap=plt.cm.gray)
+    plt.subplot(2, 2, 4)
+    plt.imshow(condition)
     plt.show()
