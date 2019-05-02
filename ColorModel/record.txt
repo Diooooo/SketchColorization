@@ -1,2 +1,3 @@
 unet-simple26--work--train only 10 images--use vgg
-unet-simple27--pre trained unet
+unet-simple27--pre trained unet--100epoch, 10000images--work well
+unet30--trained with gan and pre trained unet

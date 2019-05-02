@@ -1,3 +1,6 @@
+import sys
+
+sys.path.append('..')
 import numpy as np
 import tensorflow as tf
 import matplotlib.pyplot as plt
@@ -114,9 +117,10 @@ class Unet:
                 sample_out = None
         return out, sample_out
 
-    def train(self, dataset_path, list_files, epochs, epochs_pre=20, learning_rate=0.01, clip_low=-0.01, clip_high=0.01,
+    def train(self, dataset_path, list_files, epochs, mode_save_path, epochs_pre=20, learning_rate=0.01, clip_low=-0.01,
+              clip_high=0.01,
               r=1, l=10,
-              save_index=1):
+              save_index=1, restore_index=1):
         tf.reset_default_graph()
         input = tf.placeholder(tf.float32, shape=(None, self.image_shape[0], self.image_shape[1], 1), name='input')
         condition = tf.placeholder(tf.float32, shape=(None, self.image_shape[0], self.image_shape[1], 3),
@@ -126,9 +130,12 @@ class Unet:
         # random_e = tf.placeholder(tf.float32, shape=[None, 1, 1, 1], name='random_e')
 
         g_logits = self.generator(input, condition, is_training)
+        tf.add_to_collection('g_logits', g_logits)
 
         d_logits_real = self.discriminator(target, condition, reuse=False)
         d_logits_fake = self.discriminator(g_logits, condition, reuse=True)
+        tf.add_to_collection('d_logits_real', d_logits_real)
+        tf.add_to_collection('d_logits_fake', d_logits_fake)
 
         # l1_loss = tf.reduce_mean(tf.reduce_sum(tf.abs(g_logits - target), axis=[1, 2, 3]))
         # l2_loss = tf.reduce_mean(tf.reduce_sum(tf.square(g_logits - target), axis=[1, 2, 3]))
@@ -159,26 +166,30 @@ class Unet:
         # clip_d_var = [var.assign(tf.clip_by_value(var, clip_low, clip_high)) for var in var_d]
 
         data_parser = DataParserV2(dataset_path, self.image_shape, list_files=list_files, batch_size=self.batch_size)
-        data_parser_test = DataParserV2(dataset_path, self.image_shape, list_files=['../dataset/image_list_8.txt'],
-                                        batch_size=20)
+        # data_parser_test = DataParserV2(dataset_path, self.image_shape, list_files=['../dataset/image_list_8.txt'],
+        #                                 batch_size=20)
         config = tf.ConfigProto()
         config.gpu_options.allow_growth = True
         losses = []
+        losses_epoch = []
         losses_pretrain = []
 
-        test_input = data_parser_test.get_batch_sketch()
-        test_target = data_parser_test.get_batch_raw()
-        test_condition = data_parser_test.get_batch_condition_add()
-        test = {'input': test_input, 'target': test_target, 'condition': test_condition}
-        np.save('./results/test_data_{}.npy'.format(save_index), test)
+        # test_input = data_parser_test.get_batch_sketch()
+        # test_target = data_parser_test.get_batch_raw()
+        # test_condition = data_parser_test.get_batch_condition_add()
+        # test = {'input': test_input, 'target': test_target, 'condition': test_condition}
+        # np.save('./results/test_data_{}.npy'.format(save_index), test)
 
-        # test = np.load('./results/test_data_{}.npy'.format(save_index)).item()
+        test = np.load('./results/test_data_{}.npy'.format(restore_index)).item()
         outputs = []
         # outputs_pretrian = []
+
+        model_dir = os.path.join(mode_save_path, 'unet{}'.format(save_index))
         try:
-            os.makedirs('./checkpoints/unet{}'.format(save_index))
+            os.makedirs(model_dir)
         except FileExistsError as e:
             print(e)
+
         var_list = tf.trainable_variables('generator')
         # bn_var = [var for var in tf.global_variables('generator') if 'moving_mean' in var.name]
         # bn_var += [var for var in tf.global_variables('generator') if 'moving_variance' in var.name]
@@ -195,7 +206,7 @@ class Unet:
             # merged = tf.summary.merge_all()
 
             sess.run(tf.global_variables_initializer())
-            saver.restore(sess, './checkpoints/unet_simple27/model.ckpt')
+            saver.restore(sess, './checkpoints/unet_simple27/model-100.ckpt')
 
             # pre-train generator
             # for g_epoch in range(epochs_pre):
@@ -259,6 +270,7 @@ class Unet:
                     # log = sess.run(merged)
                     # writer.add_summary(log, epoch * data_parser_inputs.iteration + i + 1)
                     losses.append([loss_d, loss_g, loss_d_val, loss_g_val])
+                    losses_epoch.append([loss_d, loss_g, loss_d_val, loss_g_val])
                     if i % 10 == 0:
                         # log_val, val_loss_g, val_loss_d = sess.run([merged, g_loss, d_loss],
                         #                                            feed_dict={input: batch_input,
@@ -266,20 +278,25 @@ class Unet:
                         #                                                       target: batch_target})
                         # writer_val.add_summary(log_val, epoch * data_parser_inputs.iteration + i + 1)
                         print(
-                            'Epoch: {}, Iteration: {}/{}, g_loss: {}, d_loss: {}'.format(
-                                epoch + 1, i + 1, data_parser.iteration, loss_g, loss_d))
+                            'Epoch: {}, Iteration: {}/{}, g_loss: {}, d_loss: {}, g_loss_val: {}, d_loss_val: {}'.format(
+                                epoch + 1, i + 1, data_parser.iteration, loss_g, loss_d, loss_g_val, loss_d_val))
                 print('*' * 10,
                       'Epoch {}/{} ...'.format(epoch + 1, epochs),
                       'g_loss: {:.4f} ...'.format(loss_g),
                       'd_loss: {:.4f} ...'.format(loss_d),
+                      'g_loss_val: {:.4f} ...'.format(loss_g_val),
+                      'd_loss_val: {:.4f} ...'.format(loss_d_val),
                       # 'l1_loss: {:.4f} ...'.format(loss_l1),
                       '*' * 10)
-                if (epochs + 1) % 20 == 0:
+                if (epochs + 1) % 10 == 0:
                     output = sess.run(g_logits, feed_dict={input: test['input'], condition: test['condition'],
                                                            target: test['target'], is_training: False})
-                    outputs.append(output)
-                # saver.save(sess, './checkpoints/unet8/checkpoint_{}.ckpt'.format(epoch + 1))
-            saver.save(sess, './checkpoints/unet{}/model.ckpt'.format(save_index))
+                    # outputs.append(output)
+                    saver.save(sess, os.path.join(model_dir, 'checkpoint-{}.ckpt'.format(epoch + 1)))
+                    np.save('./results/predicted_pre_{}-{}.npy'.format(save_index, epoch + 1), np.asarray(output))
+                    np.save('./logs/train/losses_{}-{}.npy'.format(save_index, epoch + 1), losses_epoch)
+                    losses_epoch = []
+            # saver.save(sess, './checkpoints/unet{}/model.ckpt'.format(save_index))
             np.save('./results/predicted_{}.npy'.format(save_index), np.asarray(outputs))
             # np.save('./results/predicted_pre_{}.npy'.format(save_index), np.asarray(outputs_pretrian))
         return losses
@@ -292,11 +309,13 @@ if __name__ == '__main__':
     batch_size = 10
     l1_rate = 0.005
     index = 30
+    restore_index = 27
+    mode_save_path = '/media/bilin/MyPassport/data/checkpoints'
 
     model = Unet(resize_shape, batch_size=batch_size)
 
-    losses = model.train(dataset_path, list_files, 100, learning_rate=0.0001,
-                         save_index=index)
+    losses = model.train(dataset_path, list_files, 100, mode_save_path, learning_rate=0.0001,
+                         save_index=index, restore_index=restore_index)
     losses = np.asarray(losses)
     np.save('./logs/train/losses_{}.npy'.format(index), losses)
     # np.save('./logs/train/losses_pre_{}.npy'.format(index), np.asarray(losses_pretrain))
@@ -304,21 +323,21 @@ if __name__ == '__main__':
     # losses = np.load('./logs/train/losses_{}.npy'.format(index))
     # losses_pretrain = np.load('./logs/train/losses_pre_{}.npy'.format(index))
     # losses_pretrain = np.asarray(losses_pretrain)
-    plt.plot(losses[:, 0], label='train')
-    plt.plot(losses[:, 2], label='val')
-    plt.legend(loc='upper right')
-    plt.title('d loss')
-    plt.xlabel('Iteration')
-    plt.ylabel('Loss')
-    plt.show()
-
-    plt.plot(losses[:, 1], label='train')
-    plt.plot(losses[:, 3], label='val')
-    plt.legend(loc='upper right')
-    plt.title('g loss')
-    plt.xlabel('Iteration')
-    plt.ylabel('Loss')
-    plt.show()
+    # plt.plot(losses[:, 0], label='train')
+    # plt.plot(losses[:, 2], label='val')
+    # plt.legend(loc='upper right')
+    # plt.title('d loss')
+    # plt.xlabel('Iteration')
+    # plt.ylabel('Loss')
+    # plt.show()
+    #
+    # plt.plot(losses[:, 1], label='train')
+    # plt.plot(losses[:, 3], label='val')
+    # plt.legend(loc='upper right')
+    # plt.title('g loss')
+    # plt.xlabel('Iteration')
+    # plt.ylabel('Loss')
+    # plt.show()
 
     # plt.plot(losses_pretrain)
     # plt.title('l1 loss')
@@ -326,39 +345,39 @@ if __name__ == '__main__':
     # plt.ylabel('Loss')
     # plt.show()
 
-    test = np.load('./results/test_data_{}.npy'.format(index))
-    imgs = np.load('./results/predicted_{}.npy'.format(index))
-    # imgs_pre = np.load('./results/predicted_pre_{}.npy'.format(index))
-
-    plt.figure()
-    for i_image in range(5):
-        img = test.item().get('input')[i_image]
-        img = (1 - img)
-        # img = img.astype(np.uint8)
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        plt.subplot(2, 5, 1)
-        plt.imshow(img)
-
-        img = test.item().get('condition')[i_image]
-        img = (1 - img)
-        # img = img.astype(np.uint8)
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        plt.subplot(2, 5, 2)
-        plt.imshow(img)
-
-        img = test.item().get('target')[i_image]
-        img = (1 - img)
-        # img = img.astype(np.uint8)
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        plt.subplot(2, 5, 3)
-        plt.imshow(img)
-
-        for i in range(5):
-            img = imgs[i, i_image]
-            img = (1 - img)
-            # img = img.astype(np.uint8)
-            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            # print(img.shape)
-            plt.subplot(2, 5, i + 6)
-            plt.imshow(img)
-        plt.show()
+    # test = np.load('./results/test_data_{}.npy'.format(index))
+    # imgs = np.load('./results/predicted_{}.npy'.format(index))
+    # # imgs_pre = np.load('./results/predicted_pre_{}.npy'.format(index))
+    #
+    # plt.figure()
+    # for i_image in range(5):
+    #     img = test.item().get('input')[i_image]
+    #     img = (1 - img)
+    #     # img = img.astype(np.uint8)
+    #     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    #     plt.subplot(2, 5, 1)
+    #     plt.imshow(img)
+    #
+    #     img = test.item().get('condition')[i_image]
+    #     img = (1 - img)
+    #     # img = img.astype(np.uint8)
+    #     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    #     plt.subplot(2, 5, 2)
+    #     plt.imshow(img)
+    #
+    #     img = test.item().get('target')[i_image]
+    #     img = (1 - img)
+    #     # img = img.astype(np.uint8)
+    #     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    #     plt.subplot(2, 5, 3)
+    #     plt.imshow(img)
+    #
+    #     for i in range(5):
+    #         img = imgs[i, i_image]
+    #         img = (1 - img)
+    #         # img = img.astype(np.uint8)
+    #         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    #         # print(img.shape)
+    #         plt.subplot(2, 5, i + 6)
+    #         plt.imshow(img)
+    #     plt.show()
