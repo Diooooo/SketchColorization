@@ -72,6 +72,62 @@ def move_files_by_namelist(img_dir, save_path, list_file):
             print('Move ', name, ' to ', new_name)
 
 
+def images2npy(data_dir, list_file, resize_shape, save_dir):
+    """
+    currently, it can only deal with one list file, due to the memory capacity
+    :param data_dir: path of dataset, should contains "raw_image", "sketch", "color_hint", "color_hint_with_whiteout"
+     and "color_block"
+    :param list_file: file contains name of images
+    :param resize_shape: resize shape
+    :param save_dir: save path
+    :return: None
+    """
+    with open(list_file) as f:
+        img_names = f.readlines()
+    index = list_file.split('_')[-1].split('.')[0]
+    raw_imgs = []
+    sketches = []
+    color_hints = []
+    whiteouts = []
+    color_blocks = []
+    for i, name in enumerate(img_names):
+        img_name = name.strip('\n')
+        raw_image = cv2.imread(os.path.join(os.path.join(data_dir, 'raw_image/{:03d}'.format(int(index))), img_name))
+        raw_image = cv2.resize(raw_image, resize_shape)
+
+        img_num = img_name.split('/')[-1].split('.')[0]  # 'str'
+
+        sketch = cv2.imread(
+            os.path.join(os.path.join(data_dir, 'sketch/{:03d}'.format(int(index))), img_num + '_sketch.jpg'))
+        sketch = cv2.resize(sketch, resize_shape)
+
+        color_hint = cv2.imread(
+            os.path.join(os.path.join(data_dir, 'color_hint/{:03d}'.format(int(index))), img_num + '_colorhint.jpg'))
+        color_hint = cv2.resize(color_hint, resize_shape)
+
+        whiteout = cv2.imread(
+            os.path.join(os.path.join(data_dir, 'color_hint_with_whiteout/{:03d}'.format(int(index))),
+                         img_num + '_whiteout.jpg'))
+        whiteout = cv2.resize(whiteout, resize_shape)
+
+        color_block = cv2.imread(
+            os.path.join(os.path.join(data_dir, 'color_block/{:03d}'.format(int(index))), img_num + '_colorblock.jpg'))
+        color_block = cv2.resize(color_block, resize_shape)
+
+        raw_imgs.append(raw_image.astype(np.uint8))
+        sketches.append(sketch.astype(np.uint8))
+        color_hints.append(color_hint.astype(np.uint8))
+        whiteouts.append(whiteout.astype(np.uint8))
+        color_blocks.append(color_block.astype(np.uint8))
+        print('Saved [{}]'.format(img_name), '--no.{}'.format(i + 1))
+    np.save(os.path.join(os.path.join(save_dir, '{:03d}'.format(int(index))), 'raw.npy'), raw_imgs)
+    np.save(os.path.join(os.path.join(save_dir, '{:03d}'.format(int(index))), 'sketch.npy'), sketches)
+    np.save(os.path.join(os.path.join(save_dir, '{:03d}'.format(int(index))), 'color_hint.npy'), color_hints)
+    np.save(os.path.join(os.path.join(save_dir, '{:03d}'.format(int(index))), 'whiteout.npy'), whiteouts)
+    np.save(os.path.join(os.path.join(save_dir, '{:03d}'.format(int(index))), 'color_block.npy'), color_blocks)
+    print('*' * 10 + 'Saved [{}]'.format(len(img_names)) + ' from ', list_file + '*' * 10)
+
+
 if __name__ == "__main__":
     # generate_img_file('/media/bilin/MyPassport/zerochain', './dataset')
     for i in range(1, 9, 1):

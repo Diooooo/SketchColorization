@@ -170,6 +170,89 @@ class DataParserV2:
         return np.asarray(res)
 
 
+class DataParserV3:
+    def __init__(self, dataset_path, resize_shape, index, batch_size, max_length=None):
+        self.dataset_path = dataset_path
+        self.resize_shape = resize_shape
+        self.batch_size = batch_size
+
+        self.raw_images = np.load(os.path.join(os.path.join(self.dataset_path, '{:03d}'.format(index)), 'raw.npy'))
+        self.sketches = np.load(os.path.join(os.path.join(self.dataset_path, '{:03d}'.format(index)), 'sketch.npy'))
+        self.color_hints = np.load(
+            os.path.join(os.path.join(self.dataset_path, '{:03d}'.format(index)), 'color_hint.npy'))
+        self.color_hint_whiteouts = np.load(
+            os.path.join(os.path.join(self.dataset_path, '{:03d}'.format(index)), 'whiteout.npy'))
+        self.color_blocks = np.load(
+            os.path.join(os.path.join(self.dataset_path, '{:03d}'.format(index)), 'color_block.npy'))
+
+        self.m = len(self.raw_images.shape[0])
+        self.iteration = int(np.ceil(self.m / self.batch_size))
+        self.iterator = 0
+        self.indices = np.random.permutation(self.m)
+        if max_length and max_length < self.m:
+            self.indices = self.indices[:max_length]
+            self.m = max_length
+            self.iteration = int(np.ceil(self.m / self.batch_size))
+
+    def get_indices(self, update=False):
+        if self.iterator + 1 < self.iteration:
+            batch_indices = self.indices[self.iterator * self.batch_size:(self.iterator + 1) * self.batch_size]
+            if update:
+                self.iterator += 1
+        else:
+            batch_indices = self.indices[self.iterator * self.batch_size:]
+            if update:
+                self.iterator = 0
+                np.random.shuffle(self.indices)
+        return batch_indices
+
+    def update_iterator(self):
+        self.get_indices(True)
+
+    def get_batch_raw(self):
+        indices = self.get_indices()
+        raws = self.raw_images[indices].astype(np.float32)
+        return 1 - raws / 255
+
+    def get_batch_sketch(self):
+        indices = self.get_indices()
+        sketches = self.sketches[indices]
+        noise_channel = np.zeros_like(sketches)
+        for i in range(len(indices)):
+            noise = np.random.normal(loc=0, scale=0.1, size=1000)
+            pos = np.random.permutation(self.resize_shape[0] * self.resize_shape[1])[:1000]
+            for j, val in enumerate(pos):
+                noise_channel[i, val // self.resize_shape[0], val % self.resize_shape[1]] = noise[j]
+        sketches = 1 - sketches / 255 + noise_channel
+        return np.expand_dims(sketches, axis=3)
+
+    def get_batch_color_hint(self):
+        indices = self.get_indices()
+        res = self.color_hints[indices].astype(np.float32)
+        return 1 - res / 255
+
+    def get_batch_color_hint_whiteout(self):
+        indices = self.get_indices()
+        res = self.color_hint_whiteouts[indices].astype(np.float32)
+        return 1 - res / 255
+
+    def get_batch_color_block(self):
+        indices = self.get_indices()
+        res = self.color_blocks[indices].astype(np.float32)
+        return 1 - res / 255
+
+    def get_batch_condition(self):
+        white_outs = self.get_batch_color_hint_whiteout()
+        color_blocks = self.get_batch_color_block()
+        return np.concatenate((white_outs, color_blocks), axis=3)
+
+    def get_batch_condition_add(self):
+        white_outs = self.get_batch_color_hint_whiteout()
+        color_blocks = self.get_batch_color_block()
+        white_outs[color_blocks > 0.1] = color_blocks[color_blocks > 0.1]
+        return white_outs
+
+
 if __name__ == "__main__":
     data_parser = DataParserV2('../dataset', (512, 512), list_files=['../dataset/image_list_1.txt'], batch_size=5)
     condition = data_parser.get_batch_condition_add()
