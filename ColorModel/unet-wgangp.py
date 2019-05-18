@@ -43,9 +43,6 @@ class Unet:
 
             g_logits = tf.layers.conv2d(decode4, 3, (3, 3), padding='same', name='logits', activation=tf.nn.sigmoid)
 
-            # loss = tf.nn.sigmoid_cross_entropy_with_logits(labels=self.target, logits=g_logits)
-            # cost = tf.reduce_mean(loss)
-            # optimizer = tf.train.AdamOptimizer().minimize(cost)
         return g_logits
 
     def discriminator(self, input, condition, reuse=False):
@@ -67,8 +64,7 @@ class Unet:
             d_logits = tf.layers.dense(layer, 1000, kernel_initializer=tf.contrib.layers.variance_scaling_initializer(),
                                        activation=tf.nn.relu)
             d_logits = tf.layers.dense(d_logits, 1,
-                                       kernel_initializer=tf.contrib.layers.variance_scaling_initializer(),
-                                       activation=tf.nn.sigmoid)
+                                       kernel_initializer=tf.contrib.layers.variance_scaling_initializer())
         return d_logits
 
     def cnn_block(self, input, num_filter, kernel_size, sample_type, scope_name, is_train, deconv_concatenate=None,
@@ -117,9 +113,8 @@ class Unet:
                 sample_out = None
         return out, sample_out
 
-    def train(self, dataset_path, list_files, epochs, mode_save_path, epochs_pre=20, learning_rate=0.01, clip_low=-0.01,
-              clip_high=0.01,
-              r=1, l=10,
+    def train(self, dataset_path, list_files, epochs, mode_save_path, learning_rate=0.01, l1_rate=0.001,
+              penalty_rate=10,
               save_index=1, restore_index=1):
         tf.reset_default_graph()
         input = tf.placeholder(tf.float32, shape=(None, self.image_shape[0], self.image_shape[1], 1), name='input')
@@ -127,7 +122,7 @@ class Unet:
                                    name='condition')
         target = tf.placeholder(tf.float32, shape=(None, self.image_shape[0], self.image_shape[1], 3), name='output')
         is_training = tf.placeholder(tf.bool, name='is_training')
-        # random_e = tf.placeholder(tf.float32, shape=[None, 1, 1, 1], name='random_e')
+        random_e = tf.placeholder(tf.float32, shape=[None, 1, 1, 1], name='random_e')
 
         g_logits = self.generator(input, condition, is_training)
         tf.add_to_collection('g_logits', g_logits)
@@ -137,18 +132,15 @@ class Unet:
         tf.add_to_collection('d_logits_real', d_logits_real)
         tf.add_to_collection('d_logits_fake', d_logits_fake)
 
-        # l1_loss = tf.reduce_mean(tf.reduce_sum(tf.abs(g_logits - target), axis=[1, 2, 3]))
-        # l2_loss = tf.reduce_mean(tf.reduce_sum(tf.square(g_logits - target), axis=[1, 2, 3]))
-        # print(l1_loss.shape)
-        # g_loss = -tf.reduce_mean(d_logits_fake)
         eps = 1e-16
-        g_loss = -tf.reduce_mean(tf.log(d_logits_fake + eps))
-        # x_hat = random_e * target + (1 - random_e) * g_logits
-        # d_logits_xhat = self.discriminator(x_hat, condition, reuse=True)
-        # grads = tf.gradients(d_logits_xhat, [x_hat])[0]
-        # penalty = tf.reduce_mean(tf.square(tf.sqrt(tf.reduce_sum(tf.square(grads), axis=[1, 2, 3]) + eps) - 1))
-        # d_loss = tf.reduce_mean(d_logits_fake - d_logits_real) + l * penalty
-        d_loss = -tf.reduce_mean(tf.log(d_logits_real + eps) + tf.log(1 - d_logits_fake + eps))
+        l1_loss = tf.reduce_mean(tf.reduce_sum(tf.abs(g_logits - target), axis=[1, 2, 3]))
+        g_loss = -tf.reduce_mean(d_logits_fake) + l1_rate * l1_loss
+
+        x_hat = random_e * target + (1 - random_e) * g_logits
+        d_logits_xhat = self.discriminator(x_hat, condition, reuse=True)
+        grads = tf.gradients(d_logits_xhat, [x_hat])[0]
+        penalty = tf.reduce_mean(tf.square(tf.sqrt(tf.reduce_sum(tf.square(grads), axis=[1, 2, 3]) + eps) - 1))
+        d_loss = tf.reduce_mean(d_logits_fake - d_logits_real) + penalty_rate * penalty
         # tf.summary.scalar('g_loss', g_loss)
         # tf.summary.scalar('d_loss', d_loss)
 
@@ -161,9 +153,6 @@ class Unet:
             g_optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(g_loss, var_list=var_g)
         with tf.control_dependencies(bn_ops_d):
             d_optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(d_loss, var_list=var_d)
-        # g_pretrain = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(l2_loss, var_list=var_g)
-
-        # clip_d_var = [var.assign(tf.clip_by_value(var, clip_low, clip_high)) for var in var_d]
 
         data_parser = DataParserV2(dataset_path, self.image_shape, list_files=list_files, batch_size=self.batch_size)
         # data_parser_test = DataParserV2(dataset_path, self.image_shape, list_files=['../dataset/image_list_8.txt'],
@@ -172,7 +161,6 @@ class Unet:
         config.gpu_options.allow_growth = True
         losses = []
         losses_epoch = []
-        losses_pretrain = []
 
         # test_input = data_parser_test.get_batch_sketch()
         # test_target = data_parser_test.get_batch_raw()
@@ -182,7 +170,6 @@ class Unet:
 
         test = np.load('./results/test_data_{}.npy'.format(restore_index)).item()
         outputs = []
-        # outputs_pretrian = []
 
         model_dir = os.path.join(mode_save_path, 'unet{}'.format(save_index))
         try:
@@ -195,6 +182,7 @@ class Unet:
         # bn_var += [var for var in tf.global_variables('generator') if 'moving_variance' in var.name]
         # var_list += bn_var
         saver = tf.train.Saver(var_list)
+        saver_model = tf.train.Saver(max_to_keep=100)
         run_options = tf.RunOptions(report_tensor_allocations_upon_oom=True)
         # init_var = [var for var in tf.global_variables() if 'generator' not in var.name]
         # for var in tf.global_variables():
@@ -208,37 +196,6 @@ class Unet:
             sess.run(tf.global_variables_initializer())
             saver.restore(sess, './checkpoints/unet_simple27/model-100.ckpt')
 
-            # pre-train generator
-            # for g_epoch in range(epochs_pre):
-            #     for i in range(data_parser.iteration):
-            #         batch_input = data_parser.get_batch_sketch()
-            #         # print(batch_input.dtype, batch_input.shape)
-            #         batch_target = data_parser.get_batch_raw()
-            #         # print(batch_target.dtype, batch_target.shape)
-            #         # batch_condition = data_parser.get_batch_condition_add()
-            #         # print(batch_condition.dtype, batch_condition.shape)
-            #         data_parser.update_iterator()
-            #
-            #         _, loss_l2 = sess.run([g_pretrain, l2_loss],
-            #                               feed_dict={input: batch_input,
-            #                                          target: batch_target, is_training: True},
-            #                               options=run_options)
-            #         losses_pretrain.append(loss_l2)
-            #         if i % 10 == 0:
-            #             print(
-            #                 'Epoch: {}, Iteration: {}/{}, l1_loss: {}'.format(
-            #                     g_epoch + 1, i + 1, data_parser.iteration, loss_l2))
-            #     print('*' * 10,
-            #           'Epoch {}/{} ...'.format(g_epoch + 1, epochs_pre),
-            #           'l1_loss: {:.4f} ...'.format(loss_l2),
-            #           '*' * 10)
-            #     output_pre = sess.run(g_logits, feed_dict={input: test_input,
-            #                                                target: test_target, is_training: False})
-            #     outputs_pretrian.append(output_pre)
-
-            # for _ in range(10):
-            #     print('*' * 10)
-
             for epoch in range(epochs):
                 loss_g = 0
                 loss_d = 0
@@ -251,56 +208,57 @@ class Unet:
                     data_parser.update_iterator()
 
                     for _ in range(i_d):
-                        # e = np.random.uniform(0, 1, [batch_target.shape[0], 1, 1, 1])
-                        # e = tf.random_uniform(shape=[batch_target.shape[0], 1], minval=0, maxval=1)
+                        e = np.random.uniform(0, 1, [batch_target.shape[0], 1, 1, 1])
                         _, loss_d = sess.run([d_optimizer, d_loss],
-                                             feed_dict={input: batch_input, condition: batch_condition,
-                                                        target: batch_target, is_training: True},
+                                             feed_dict={input: batch_input,
+                                                        condition: batch_condition,
+                                                        target: batch_target,
+                                                        random_e: e,
+                                                        is_training: True},
                                              options=run_options)
-                        # sess.run(clip_d_var)
 
                     for _ in range(i_g):
-                        _, loss_g = sess.run([g_optimizer, g_loss],
-                                             feed_dict={input: batch_input, condition: batch_condition,
-                                                        target: batch_target, is_training: True},
-                                             options=run_options)
-                    loss_d_val, loss_g_val = sess.run([d_loss, g_loss],
-                                                      feed_dict={input: test['input'], condition: test['condition'],
-                                                                 target: test['target'], is_training: False})
-                    # log = sess.run(merged)
-                    # writer.add_summary(log, epoch * data_parser_inputs.iteration + i + 1)
-                    losses.append([loss_d, loss_g, loss_d_val, loss_g_val])
-                    losses_epoch.append([loss_d, loss_g, loss_d_val, loss_g_val])
+                        _, loss_g, loss_l1 = sess.run([g_optimizer, g_loss, l1_loss],
+                                                      feed_dict={input: batch_input,
+                                                                 condition: batch_condition,
+                                                                 target: batch_target,
+                                                                 is_training: True},
+                                                      options=run_options)
+                    e = np.random.uniform(0, 1, [20, 1, 1, 1])
+                    loss_d_val, loss_g_val, loss_l1_val = sess.run([d_loss, g_loss, l1_loss],
+                                                                   feed_dict={input: test['input'],
+                                                                              condition: test['condition'],
+                                                                              target: test['target'],
+                                                                              random_e: e,
+                                                                              is_training: False})
+
+                    losses.append([loss_d, loss_g, loss_d_val, loss_g_val, loss_l1])
+                    losses_epoch.append([loss_d, loss_g, loss_d_val, loss_g_val, loss_l1_val])
                     if i % 10 == 0:
-                        # log_val, val_loss_g, val_loss_d = sess.run([merged, g_loss, d_loss],
-                        #                                            feed_dict={input: batch_input,
-                        #                                                       condition: batch_condition,
-                        #                                                       target: batch_target})
-                        # writer_val.add_summary(log_val, epoch * data_parser_inputs.iteration + i + 1)
                         print(
-                            'Epoch: {}, Iteration: {}/{}, g_loss: {}, d_loss: {}, g_loss_val: {}, d_loss_val: {}'.format(
-                                epoch + 1, i + 1, data_parser.iteration, loss_g, loss_d, loss_g_val, loss_d_val))
+                            'Epoch: {}, Iteration: {}/{}, g_loss: {}, d_loss: {}, l1:loss: {},'
+                            ' g_loss_val: {}, d_loss_val: {}, l1_loss_val: {}'.format(
+                                epoch + 1, i + 1, data_parser.iteration, loss_g, loss_d, loss_l1, loss_g_val,
+                                loss_d_val, loss_l1_val))
                 print('*' * 10,
                       'Epoch {}/{} ...'.format(epoch + 1, epochs),
                       'g_loss: {:.4f} ...'.format(loss_g),
                       'd_loss: {:.4f} ...'.format(loss_d),
                       'g_loss_val: {:.4f} ...'.format(loss_g_val),
                       'd_loss_val: {:.4f} ...'.format(loss_d_val),
-                      # 'l1_loss: {:.4f} ...'.format(loss_l1),
+                      'l1_loss: {:.4f} ...'.format(loss_l1),
+                      'l1_loss_val: {:.4f} ...'.format(loss_l1_val),
                       '*' * 10)
                 if (epoch + 1) % 10 == 0:
                     print('*' * 10, 'save results', '*' * 10)
                     output = sess.run(g_logits, feed_dict={input: test['input'], condition: test['condition'],
                                                            target: test['target'], is_training: False})
-                    # outputs.append(output)
-                    saver.save(sess, os.path.join(model_dir, 'checkpoint-{}.ckpt'.format(epoch + 1)))
                     np.save('./results/predicted_pre_{}-{}.npy'.format(save_index, epoch + 1), np.asarray(output))
                     np.save('./logs/train/losses_{}-{}.npy'.format(save_index, epoch + 1), losses_epoch)
                     losses_epoch = []
                 print('*' * 10, 'save model', '*' * 10)
-                saver.save(sess, os.path.join(model_dir, 'checkpoint-{}.ckpt'.format(epoch + 1)))
+                saver_model.save(sess, os.path.join(model_dir, 'checkpoint-{}.ckpt'.format(epoch + 1)))
             np.save('./results/predicted_{}.npy'.format(save_index), np.asarray(outputs))
-            # np.save('./results/predicted_pre_{}.npy'.format(save_index), np.asarray(outputs_pretrian))
         return losses
 
 
@@ -309,17 +267,18 @@ if __name__ == '__main__':
     resize_shape = (256, 256)
     list_files = ['../dataset/image_list_1.txt']
     batch_size = 10
-    l1_rate = 0.005
-    index = 30
+    index = 31
     restore_index = 27
+    l1_rate = 0.001
+    penalty_rate = 10
     mode_save_path = '/media/bilin/MyPassport/data/checkpoints'
 
     model = Unet(resize_shape, batch_size=batch_size)
 
     losses = model.train(dataset_path, list_files, 100, mode_save_path, learning_rate=0.0001,
-                         save_index=index, restore_index=restore_index)
-    # losses = np.asarray(losses)
-    # np.save('./logs/train/losses_{}.npy'.format(index), losses)
+                         save_index=index, restore_index=restore_index, l1_rate=l1_rate, penalty_rate=penalty_rate)
+    losses = np.asarray(losses)
+    np.save('./logs/train/losses_{}.npy'.format(index), losses)
     # np.save('./logs/train/losses_pre_{}.npy'.format(index), np.asarray(losses_pretrain))
 
     # losses = np.load('./logs/train/losses_{}.npy'.format(index))
@@ -397,3 +356,28 @@ if __name__ == '__main__':
     #         plt.subplot(4, 5, i + 6)
     #         plt.imshow(img)
     #     plt.show()
+
+    # sess = tf.Session()
+    # new_saver = tf.train.import_meta_graph(os.path.join(mode_save_path, 'unet31/checkpoint-1.ckpt.meta'))
+    # new_saver.restore(sess, tf.train.latest_checkpoint(os.path.join(mode_save_path, 'unet31')))
+    #
+    # data_parser = DataParserV2(dataset_path, resize_shape, list_files=list_files, batch_size=batch_size,
+    #                            max_length=10)
+    # graph = tf.get_default_graph()
+    # inputs = graph.get_tensor_by_name('input:0')
+    # condition = graph.get_tensor_by_name('condition:0')
+    # target = graph.get_tensor_by_name('output:0')
+    # is_train = graph.get_tensor_by_name('is_training:0')
+    # random_e = graph.get_tensor_by_name('random_e:0')
+    #
+    # # logits = graph.get_tensor_by_name('generator/logits/Sigmoid:0')
+    # logits = graph.get_collection('g_logits')
+    #
+    # e = np.random.uniform(0, 1, [10, 1, 1, 1])
+    #
+    # generated = sess.run(logits, feed_dict={inputs: data_parser.get_batch_sketch(),
+    #                                         condition: data_parser.get_batch_color_hint(),
+    #                                         target: data_parser.get_batch_raw(),
+    #                                         random_e: e,
+    #                                         is_train: False})
+    # sess.close()

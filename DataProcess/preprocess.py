@@ -38,15 +38,16 @@ def sketch_keras(batch_img):  # shape:(n, 512, 512, 3)
     return sketches
 
 
-# def sketch_hed(raw_img):
-#     model = load_model('../models/hed.hdf5')
-#     raw = cv2.resize(raw_image, (480, 480))
-#     raw = np.expand_dims(raw, 0)
-#     mask = np.zeros((480, 480))
-#     prediction = model.predict(raw)
-#     for i in range(len(prediction)):
-#         mask += np.reshape(prediction[i], (480, 480))
-#     return sketch
+def sketch_hed(raw_image, resize_shape):
+    model = load_model('/home/bilin/PycharmProjects/SketchColorization/models/hed.hdf5')
+    raw = cv2.resize(raw_image, (480, 480))
+    raw = np.expand_dims(raw, 0)
+    mask = np.zeros((480, 480))
+    prediction = model.predict(raw)
+    for i in range(len(prediction)):
+        mask += np.reshape(prediction[i], (480, 480))
+    _, sketch = cv2.threshold(mask, np.mean(mask) + 1.2 * np.std(mask), 255, cv2.THRESH_BINARY)
+    return cv2.resize(255 - sketch, resize_shape)
 
 
 def sketch_extract(base_path, img_file_path, out_dir, mod='sketchKeras', resize_shape=(512, 512), batch_size=128):
@@ -100,9 +101,9 @@ def sketch_extract(base_path, img_file_path, out_dir, mod='sketchKeras', resize_
 
 
 if __name__ == "__main__":
-    # raw = cv2.imread('../demo3.jpg')
+    # raw = cv2.imread('./test.jpg')
     # raw = cv2.resize(raw, (512, 512))
-    # model = load_model('../models/sketckKeras.h5')
+    # model = load_model('../models/sketchKeras.h5')
     # raw = raw.astype(np.float32)
     # light_map = np.zeros_like(raw).astype(np.float32)
     # for channel in range(light_map.shape[2]):  # get high pass map
@@ -120,6 +121,8 @@ if __name__ == "__main__":
     # sketch = ndimage.median_filter(sketch_map, 1)
     # plt.imshow(cv2.cvtColor(sketch, cv2.COLOR_BGR2RGB))
     # plt.show()
+    # cv2.imwrite('sketch-unet.jpg', cv2.resize(sketch, (256, 256)))
+    # assert False
     # out_dir = './'
     # img_name = '../demo3.jpg'.split('/')[-1]
     # cv2.imwrite(os.path.join(out_dir, img_name.split('.')[0] + '_sketch.jpg'), sketch)

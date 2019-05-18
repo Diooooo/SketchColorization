@@ -263,7 +263,7 @@ if __name__ == '__main__':
     test = np.load('./results/test_data_{}.npy'.format(index))
 
     plt.figure()
-    for i_image in range(2):
+    for i_image in range(5):
         img = test.item().get('input')[i_image]
         img = (1 - img)
         # img = img.astype(np.uint8)
@@ -296,47 +296,47 @@ if __name__ == '__main__':
             plt.imshow(img)
         plt.show()
 
-    sess = tf.Session()
-    new_saver = tf.train.import_meta_graph('./checkpoints/unet_simple27/model-100.ckpt.meta')
-    new_saver.restore(sess, tf.train.latest_checkpoint('./checkpoints/unet_simple27'))
-
-    data_parser = DataParserV2(dataset_path, resize_shape, list_files=list_files, batch_size=batch_size,
-                               max_length=10)
-    graph = tf.get_default_graph()
-    inputs = graph.get_tensor_by_name('input:0')
-    condition = graph.get_tensor_by_name('condition:0')
-    is_train = graph.get_tensor_by_name('is_training:0')
-
-    # logits = graph.get_tensor_by_name('generator/logits/Sigmoid:0')
-    logits = graph.get_collection('logits')
-
-    generated = sess.run(logits, feed_dict={inputs: data_parser.get_batch_sketch(),
-                                            condition: data_parser.get_batch_color_hint(),
-                                            is_train: False})
-    sess.close()
-
-    plt.figure()
-    for i in range(10):
-        img = generated[0][i]
-        img = (1 - img)
-        # img = img.astype(np.uint8)
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        # print(img.shape)
-        plt.subplot(2, 5, i + 1)
-        plt.imshow(img)
-    plt.show()
-
-    targets = data_parser.get_batch_raw()
-    plt.figure()
-    for i in range(10):
-        img = targets[i]
-        img = (1 - img)
-        # img = img.astype(np.uint8)
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        # print(img.shape)
-        plt.subplot(2, 5, i + 1)
-        plt.imshow(img)
-    plt.show()
+    # sess = tf.Session()
+    # new_saver = tf.train.import_meta_graph('./checkpoints/unet_simple27/model-100.ckpt.meta')
+    # new_saver.restore(sess, tf.train.latest_checkpoint('./checkpoints/unet_simple27'))
+    #
+    # data_parser = DataParserV2(dataset_path, resize_shape, list_files=list_files, batch_size=batch_size,
+    #                            max_length=10)
+    # graph = tf.get_default_graph()
+    # inputs = graph.get_tensor_by_name('input:0')
+    # condition = graph.get_tensor_by_name('condition:0')
+    # is_train = graph.get_tensor_by_name('is_training:0')
+    #
+    # # logits = graph.get_tensor_by_name('generator/logits/Sigmoid:0')
+    # logits = graph.get_collection('logits')
+    #
+    # generated = sess.run(logits, feed_dict={inputs: data_parser.get_batch_sketch(),
+    #                                         condition: data_parser.get_batch_color_hint(),
+    #                                         is_train: False})
+    # sess.close()
+    #
+    # plt.figure()
+    # for i in range(10):
+    #     img = generated[0][i]
+    #     img = (1 - img)
+    #     # img = img.astype(np.uint8)
+    #     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    #     # print(img.shape)
+    #     plt.subplot(2, 5, i + 1)
+    #     plt.imshow(img)
+    # plt.show()
+    #
+    # targets = data_parser.get_batch_raw()
+    # plt.figure()
+    # for i in range(10):
+    #     img = targets[i]
+    #     img = (1 - img)
+    #     # img = img.astype(np.uint8)
+    #     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    #     # print(img.shape)
+    #     plt.subplot(2, 5, i + 1)
+    #     plt.imshow(img)
+    # plt.show()
 
     # from tensorflow.python import pywrap_tensorflow
     # reader = pywrap_tensorflow.NewCheckpointReader('./checkpoints/unet_simple27/model.ckpt')
