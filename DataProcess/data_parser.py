@@ -5,6 +5,9 @@ import matplotlib.pyplot as plt
 
 
 class DataParser:
+    """
+    Simplest data parser, can only generate batch from one numpy array
+    """
     def __init__(self, inputs, batch_size):
         self.inputs = inputs
         self.iterator = 0
@@ -25,7 +28,18 @@ class DataParser:
 
 
 class DataParserV2:
+    """
+    generate batch data from given files, which request I/O operation every time the get_batch_{} function is called
+    """
     def __init__(self, dataset_path, resize_shape, list_files, batch_size, max_length=None):
+        """
+
+        :param dataset_path: should contains ['/raw_image', 'sketch', 'color_hint', 'color_hint_with_whiteout', 'color_block']
+        :param resize_shape: resize shape
+        :param list_files: files which contains the names of images
+        :param batch_size: batch size
+        :param max_length: max number of images to be read from list_files
+        """
         self.dataset_path = dataset_path
         self.resize_shape = resize_shape
         self.list_files = list_files
@@ -52,7 +66,7 @@ class DataParserV2:
             self.m = max_length
             self.iteration = int(np.ceil(self.m / self.batch_size))
 
-    def get_indices(self, update=False):
+    def _get_indices(self, update=False):
         if self.iterator + 1 < self.iteration:
             batch_indices = self.indices[self.iterator * self.batch_size:(self.iterator + 1) * self.batch_size]
             if update:
@@ -65,10 +79,16 @@ class DataParserV2:
         return batch_indices
 
     def update_iterator(self):
-        self.get_indices(True)
+        """
+        need to be called anytime you need to get next batch
+        """
+        self._get_indices(True)
 
     def get_batch_raw(self):
-        indices = self.get_indices()
+        """
+        get batch of original images
+        """
+        indices = self._get_indices()
         raws = []
         for id in indices:
             raw_name = os.path.join(self.raw_image_path, self.images_name[id])
@@ -78,7 +98,10 @@ class DataParserV2:
         return np.asarray(raws)
 
     def get_batch_raw_gray(self):
-        indices = self.get_indices()
+        """
+        get batch of gray images
+        """
+        indices = self._get_indices()
         raws_gray = []
         for id in indices:
             raw_name = os.path.join(self.raw_image_path, self.images_name[id])
@@ -90,7 +113,10 @@ class DataParserV2:
         return np.asarray(raws_gray)
 
     def get_batch_sketch(self):
-        indices = self.get_indices()
+        """
+        get batch of sketches
+        """
+        indices = self._get_indices()
         sketches = []
         for id in indices:
             sketch_name = os.path.join(self.sketch_path, self.images_name[id].split('.')[0] + '_sketch.jpg')
@@ -110,7 +136,10 @@ class DataParserV2:
         return np.asarray(sketches)
 
     def get_batch_color_hint(self):
-        indices = self.get_indices()
+        """
+        get batch of color hint which is just the gaussian-filtered images
+        """
+        indices = self._get_indices()
         res = []
         for id in indices:
             name = os.path.join(self.color_hint_path, self.images_name[id].split('.')[0] + '_colorhint.jpg')
@@ -120,7 +149,10 @@ class DataParserV2:
         return np.asarray(res)
 
     def get_batch_color_hint_whiteout(self):
-        indices = self.get_indices()
+        """
+        get batch of color hint which added whiteout blocks
+        """
+        indices = self._get_indices()
         res = []
         for id in indices:
             name = os.path.join(self.color_hint_whiteout_path, self.images_name[id].split('.')[0] + '_whiteout.jpg')
@@ -130,7 +162,10 @@ class DataParserV2:
         return np.asarray(res)
 
     def get_batch_color_block(self):
-        indices = self.get_indices()
+        """
+        get batch of color block, the background is white
+        """
+        indices = self._get_indices()
         res = []
         for id in indices:
             name = os.path.join(self.color_block_path, self.images_name[id].split('.')[0] + '_colorblock.jpg')
@@ -140,12 +175,19 @@ class DataParserV2:
         return np.asarray(res)
 
     def get_batch_condition(self):
+        """
+        get batch of the concatenated color hint(whiteout) and color block
+        """
         white_outs = self.get_batch_color_hint_whiteout()
         color_blocks = self.get_batch_color_block()
         return np.concatenate((white_outs, color_blocks), axis=3)
 
     def get_batch_condition_add(self):
-        indices = self.get_indices()
+        """
+        get batch of condition which replaces the specific position with color block
+        notice this function require more I/O operation
+        """
+        indices = self._get_indices()
         res = []
         for id in indices:
             name_block = os.path.join(self.color_block_path, self.images_name[id].split('.')[0] + '_colorblock.jpg')
@@ -171,7 +213,18 @@ class DataParserV2:
 
 
 class DataParserV3:
+    """
+    get batch from numpy file, the parameters' setting is almost the same as DataParserV2
+    this class currently can only load one set of data due to the memory capacity
+    """
     def __init__(self, dataset_path, resize_shape, index, batch_size, max_length=None):
+        """
+        :param dataset_path: path to load numpy files
+        :param resize_shape: resize shape
+        :param index: index of dataset to be loaded
+        :param batch_size: batch size
+        :param max_length: same as V2
+        """
         self.dataset_path = dataset_path
         self.resize_shape = resize_shape
         self.batch_size = batch_size

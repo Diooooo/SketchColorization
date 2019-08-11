@@ -6,6 +6,13 @@ import shutil
 
 
 def generate_img_file(img_dir, save_path, threshold=10):
+    """
+    clean the collected images and generate image files, one file contains at most 10k names
+    :param img_dir: directory of collected images
+    :param save_path: path to save imgae files
+    :param threshold: explained inside the code
+    :return: None
+    """
     name_list = []
     img_names = os.listdir(img_dir)
     count = 0
@@ -20,6 +27,7 @@ def generate_img_file(img_dir, save_path, threshold=10):
         if min(img.shape[0], img.shape[1]) < 256:
             print('Passed [{}]--Small'.format(name))
             continue
+        ''' data cleaning,  filtered non-colorful images via saturation'''
         img_hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
         h, s, v = cv2.split(img_hsv)
         s_w, s_h = s.shape[:2]
@@ -59,6 +67,9 @@ def generate_img_file(img_dir, save_path, threshold=10):
 
 
 def move_files_by_namelist(img_dir, save_path, list_file):
+    """
+    move images to assigned directories
+    """
     num = int(list_file.split('_')[2].split('.')[0])
     if not os.path.exists(os.path.join(save_path, '{:03d}'.format(num))):
         os.mkdir(os.path.join(save_path, '{:03d}'.format(num)))

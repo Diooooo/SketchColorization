@@ -5,70 +5,62 @@ import cv2
 import os
 
 
-def draw_loss(losses):
-    pass
+def draw_losses(data, labels, title, x_label, y_label, loc='upper right', save_png=None, res_dir='./'):
+    """
+    draw losses
+    :param data: shape: (kinds of losses, losses data)
+    :param labels: label for each kind of loss data
+    :param title: title
+    :param x_label: x lable
+    :param y_label: y label
+    :param loc: parameter of legend
+    :param save_png: name of saved result, if None, the result would be dropped
+    :param res_dir: directory to store the result figure
+    :return: None
+    """
+    if data.shape[0] != len(labels):
+        raise ValueError('labels and data not match')
+    for i in range(data.shape[0]):
+        plt.plot(data[i], label=labels[i])
+    plt.legend(loc=loc)
+    plt.title(title)
+    plt.xlabel(x_label)
+    plt.ylabel(y_label)
+    if save_png and res_dir:
+        plt.savefig(os.path.join(res_dir, save_png))
+    plt.show()
+
+
+def draw_generated(data, row, column, titles=None, save_png=None, res_dir='./'):
+    """
+    draw generated images
+    :param data: shape: (num, height, width, channels)
+    :param row: rows of subplots
+    :param column: columns of subplots
+    :param titles: title for each sub figure
+    :param save_png: name of saved result, if None, the result would be dropped
+    :param res_dir: directory to store the result figure
+    :return: None
+    """
+    if titles:
+        if data.shape[0] != len(titles):
+            raise ValueError('titles and data not match')
+    num_fig = int(min(data.shape[0], row * column))
+    f, axarr = plt.subplots(row, column)
+    for i in range(num_fig):
+        if data.shape[-1] == 1:  # gray image
+            fig = data[i].reshape(data.shape[1], data.shape[2])
+            cmap = 'gray'
+        else:
+            fig = data[i]
+            cmap = None
+        axarr[int(i / column), i % column].imshow(fig, cmap=cmap)
+        axarr[int(i / column), i % column].set_title(titles[i])
+        axarr[int(i / column), i % column].axis('off')
+    if save_png and res_dir:
+        plt.savefig(os.path.join(res_dir, save_png))
+    plt.show()
 
 
 if __name__ == '__main__':
-    index = 27
-    restore_index = 27
-    losses = None
-    res_dir = './results_img'
-    # for i in range(7):
-    #     if losses is None:
-    #         losses = np.load('./logs/train/losses_{}-{}.npy'.format(index, (i + 1) * 10))
-    #     else:
-    #         losses = np.concatenate((losses, np.load('./logs/train/losses_{}-{}.npy'.format(index, (i + 1) * 10))),
-    #                                 axis=0)
-    losses = np.load('./logs/train/losses_{}.npy'.format(index))
-    # plt.plot(losses[:, 0], label='train')
-    # plt.plot(losses[:, 2], label='val', alpha=0.9)
-    # plt.legend(loc='upper right')
-    # plt.title('d loss--unet+wgangp')
-    # plt.xlabel('Iteration')
-    # plt.ylabel('Loss')
-    # plt.savefig(os.path.join(res_dir, 'dloss-wgangp.png'))
-    # plt.show()
-    #
-    # plt.plot(losses[:, 1], label='train')
-    # plt.plot(losses[:, 3], label='val', alpha=0.9)
-    # plt.legend(loc='upper right')
-    # plt.title('g loss--unet+wgangp')
-    # plt.xlabel('Iteration')
-    # plt.ylabel('Loss')
-    # plt.savefig(os.path.join(res_dir, 'gloss-wgangp.png'))
-    # plt.show()
-
-    plt.plot(losses[:, 1], label='train')
-    plt.plot(losses[:, 4], label='val', alpha=0.9)
-    plt.legend(loc='upper right')
-    plt.title('l1 loss')
-    plt.xlabel('Iteration')
-    plt.ylabel('Loss')
-    plt.savefig(os.path.join(res_dir, 'l1-loss-unet.png'))
-    plt.show()
-
-    plt.plot(losses[:, 2], label='train')
-    plt.plot(losses[:, 5], label='val', alpha=0.9)
-    plt.legend(loc='upper right')
-    plt.title('l2 loss')
-    plt.xlabel('Iteration')
-    plt.ylabel('Loss')
-    plt.savefig(os.path.join(res_dir, 'l2-loss-unet.png'))
-    plt.show()
-
-    # test = np.load('./results/test_data_{}.npy'.format(restore_index))
-    # # imgs = np.load('./results/predicted_{}.npy'.format(index))
-    # # imgs_pre = np.load('./results/predicted_pre_{}.npy'.format(index))
-    # unet_pre = np.load('./results/predicted_pre_{}-100.npy'.format(restore_index))
-
-    # imgs = np.load('./results/predicted_pre_{}-{}.npy'.format(index, 70))
-    # for i_image in range(20):
-    #     img = imgs[i_image]
-    #     img = (1 - img)
-    #     cv2.imwrite(os.path.join(res_dir, 'wgangp-{}.jpg'.format(i_image + 1)),
-    #                 np.round(img * 255))
-    #     # img = img.astype(np.uint8)
-    #     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    #     # print(img.shape)
-    #     plt.show()
+    pass

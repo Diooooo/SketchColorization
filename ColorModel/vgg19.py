@@ -7,6 +7,17 @@ import inspect
 
 VGG_MEAN = [103.939, 116.779, 123.68]
 
+"""
+copied from https://github.com/leiup/tensorflow-vgg/blob/master/vgg19.py
+
+usage:
+import vgg19
+vgg19 = vgg19.Vgg19()
+vgg19.build(input)
+expected_output = vgg19.xxx
+(notice this vgg19 is implemented via tf.constant(), so do not need to reuse variable scope)
+"""
+
 
 class Vgg19:
     def __init__(self, vgg19_npy_path=None):

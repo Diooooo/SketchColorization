@@ -39,6 +39,12 @@ def sketch_keras(batch_img):  # shape:(n, 512, 512, 3)
 
 
 def sketch_hed(raw_image, resize_shape):
+    """
+    extract sketch using Holistically-Nested Edge Detection (HED) algorithm, currently can only extract one sketch
+    :param raw_image: single colorful image
+    :param resize_shape: required size of sketch
+    :return: onr sketch
+    """
     model = load_model('/home/bilin/PycharmProjects/SketchColorization/models/hed.hdf5')
     raw = cv2.resize(raw_image, (480, 480))
     raw = np.expand_dims(raw, 0)
@@ -137,11 +143,11 @@ if __name__ == "__main__":
         list_file = '../dataset/image_list_{:d}.txt'.format(i)  # get image list
 
         # sketch extraction
-        # sketch_output_each = os.path.join(sketch_output, '{:03d}'.format(i))  # store into ".../00?/"
-        # if not os.path.exists(sketch_output_each):
-        #     os.mkdir(sketch_output_each)
-        # sketch_extract(base_path, list_file, sketch_output_each, resize_shape=resize_shape, batch_size=500)
-        # print('Extract sketches from ', list_file)
+        sketch_output_each = os.path.join(sketch_output, '{:03d}'.format(i))  # store into ".../00?/"
+        if not os.path.exists(sketch_output_each):
+            os.mkdir(sketch_output_each)
+        sketch_extract(base_path, list_file, sketch_output_each, resize_shape=resize_shape, batch_size=500)
+        print('Extract sketches from ', list_file)
 
         # color hint, whiteout, color block
         color_hint_output_each = os.path.join(color_hint_output, '{:03d}'.format(i))

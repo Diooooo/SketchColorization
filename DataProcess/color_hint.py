@@ -28,7 +28,8 @@ def median_pyramid(img, filter_size=2):
 
 def generate_color_map(img):
     """
-    calculate color map of a single image, here we do 3 times Gaussian pyramid and then resize to the original shape
+    calculate color map of a single image, here we use one Gaussian filter with variance=35 and then resize to
+    the original shape
     :param img: original image(single)
     :return: color map(as the initial color hit)
     """
